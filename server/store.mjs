@@ -25,8 +25,8 @@ const TMP = FILE + '.tmp';
 export const DEFAULT_PASSWORD = 'admin123';
 
 /* ---------- Vercel KV 后端检测 ---------- */
-const KV_URL = String(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/+$/, '');
-const KV_TOKEN = String(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '');
+const KV_URL = String(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').replace(/\/+$/, '');
+const KV_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '');
 const IS_VERCEL = !!process.env.VERCEL;
 const KV_KEY = 'nhi:data';
 
@@ -120,7 +120,7 @@ async function bootstrap() {
         console.error('[store] KV 读取失败，改用内存态', e.message);
       }
     } else {
-      console.error('[store] 已部署到 Vercel 但未配置 KV_REST_API_URL / KV_REST_API_TOKEN，数据将不持久化');
+      console.error('[store] 已部署到 Vercel 但未配置 UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN，数据将不持久化');
     }
     cache = DEFAULTS();
     return;

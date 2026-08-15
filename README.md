@@ -71,18 +71,26 @@ node server.mjs
 
 ## 部署到 Vercel
 
-本项目已改造为 Vercel Serverless Functions 架构：前端静态托管，后端 `/api/*` 由 `api/[...path].js` 单个 catch-all 函数处理，数据存储自动从本地文件切换为 Vercel KV。
+本项目已改造为 Vercel Serverless Functions 架构：前端静态托管，后端 `/api/*` 由 `api/[...path].js` 单个 catch-all 函数处理，数据存储自动从本地文件切换为 Upstash Redis（REST 接口，零依赖、仅 `fetch`）。
 
 ### 前置条件
 
 1. 注册 Vercel 账号，安装 CLI：`npm i -g vercel`
-2. 在 Vercel 控制台创建 KV 数据库（Storage → KV → Create），记下 REST 连接信息
+2. 准备一个 Upstash Redis 数据库（见下方「创建 Redis 数据库」）
+
+### 创建 Redis 数据库
+
+Vercel 官方 KV 已于 2024 年 12 月停用，现改为 Upstash Redis。两种方式任选：
+
+方式一（推荐，自动注入）：Vercel 控制台 → 你的项目 → Storage 标签 → 搜索「Redis」/「Upstash」→ 安装 Upstash Redis 集成 → 选择区域与计划 → Create。创建后 Vercel 会自动把 `UPSTASH_REDIS_REST_URL` 与 `UPSTASH_REDIS_REST_TOKEN` 注入项目环境变量。
+
+方式二（手动）：到 upstash.com 注册并新建一个 Redis 数据库，复制 REST API 栏目的 URL 与 Token，回到 Vercel 项目 Settings → Environment Variables 手动粘贴。
 
 ### 步骤
 
-1. 在 Vercel 项目设置（Settings → Environment Variables）配置环境变量：
-   - `KV_REST_API_URL`：Vercel KV 的 REST URL（形如 `https://xxx.upstash.io`）
-   - `KV_REST_API_TOKEN`：Vercel KV 的 REST Token
+1. 确保项目环境变量里已有以下两项（方式一会自动注入；方式二需手动添加）：
+   - `UPSTASH_REDIS_REST_URL`：Upstash Redis 的 REST URL（形如 `https://xxx.upstash.io`）
+   - `UPSTASH_REDIS_REST_TOKEN`：Upstash Redis 的 REST Token
    - 各 AI 引擎密钥（可选，也可登录管理后台填写）：`GEMINI_API_KEY`、`SILICONFLOW_API_KEY`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`、`HUGGINGFACE_API_KEY`、`POLLINATIONS_API_KEY`、`IMGBB_API_KEY`
 2. 部署：
    - 方式一（CLI）：项目根执行 `vercel` 按提示导入，或 `vercel deploy --prod`
