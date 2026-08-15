@@ -79,7 +79,35 @@ export function save() {
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(TMP, JSON.stringify(cache, null, 2));
   fs.renameSync(TMP, FILE);
+  dirty = false;
 }
+
+/* ---------- 防抖写入：合并高频改动，降低磁盘 I/O 与序列化开销 ----------
+ * 高频路径（试戴计数 / 统计 / 行为上报）用 saveDebounced()：
+ *   首次调用立即排程，窗口内后续调用仅标记 dirty，到期一次性落盘。
+ * 关键操作（改密钥 / 改口令 / 封禁 / 改设置）仍走 save() 即时写，
+ *   且会把已累积的脏改动一并写盘并清除 dirty 标记，不会重复写。
+ * 进程退出（含 SIGINT/SIGTERM）时强制 flush，避免丢失最后窗口内的改动。 */
+let saveTimer = null;
+let dirty = false;
+
+export function saveDebounced(delay = 800) {
+  dirty = true;
+  if (saveTimer) return;               // 已排程，仅标记脏，到期统一写
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (dirty) save();
+  }, delay);
+  if (saveTimer.unref) saveTimer.unref();   // 不阻止进程退出，退出时由 flushOnExit 兜底
+}
+
+function flushOnExit() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  if (dirty) save();
+}
+process.on('exit', flushOnExit);
+process.on('SIGINT', () => { flushOnExit(); process.exit(0); });
+process.on('SIGTERM', () => { flushOnExit(); process.exit(0); });
 
 /* ---------- 管理员口令 ---------- */
 export function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }

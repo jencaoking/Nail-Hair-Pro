@@ -110,7 +110,7 @@ async function handleUserBehavior(req, res) {
 
   if (Array.isArray(body.events) && body.events.length > 0) {
     store.recordUserBehavior(clientId, body.events);
-    store.save();
+    store.saveDebounced();
   }
 
   const events = store.getUserEvents(clientId);
@@ -193,7 +193,7 @@ async function handleTryon(req, res) {
     if (hit.hit) {
       store.recordEvent({ clientId, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, err: hit.exact ? 'cache-hit' : `cache-fuzzy(${hit.dist})` });
       store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
-      store.save();
+      store.saveDebounced();
       const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
       return json(res, 200, {
         ok: true,
@@ -223,7 +223,7 @@ async function handleTryon(req, res) {
     }
     store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
     store.recordEvent({ clientId, provider: provider.id, ok: true, ms: Date.now() - t0 });
-    store.save();
+    store.saveDebounced();
     const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
     return json(res, 200, {
       ok: true,
@@ -236,7 +236,7 @@ async function handleTryon(req, res) {
   } catch (err) {
     const e = normalizeError(err);
     store.recordEvent({ clientId, provider: providerUsed, ok: false, ms: Date.now() - t0, err: e.message });
-    store.save();
+    store.saveDebounced();
     const code = e.type === 'Content' ? 422 : e.type === 'Quota' ? 503 : 502;
     return json(res, code, { ok: false, error: { type: e.type, message: e.message } });
   }
