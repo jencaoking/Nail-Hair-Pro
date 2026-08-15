@@ -13,6 +13,10 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_FILE = path.join(DIR, 'cache.json');
 const TMP_FILE = CACHE_FILE + '.tmp';
 
+/* Vercel Serverless 文件系统只读且多实例不共享磁盘：
+ * 缓存降级为「单实例内存态」，不读盘、不落盘（miss 只是少命中几次，不影响正确性） */
+const IS_VERCEL = !!process.env.VERCEL;
+
 export const MAX_ENTRIES = 1000;
 /* pHash 为 64bit → 汉明距离上限 64；>95% 相似 ≈ 距离 <= 3（64*5%≈3.2） */
 export const HAMMING_THRESHOLD = 3;
@@ -48,6 +52,7 @@ let loaded = false;
 function ensureLoaded() {
   if (loaded) return;
   loaded = true;
+  if (IS_VERCEL) return;   // Vercel 上跳过磁盘加载
   try {
     const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
     if (Array.isArray(raw)) {
@@ -62,6 +67,7 @@ function ensureLoaded() {
 }
 
 function persist() {
+  if (IS_VERCEL) return;   // Vercel 上不落盘
   try {
     fs.mkdirSync(DIR, { recursive: true });
     const arr = [...memory.values()].sort((a, b) => b.ts - a.ts).slice(0, MAX_ENTRIES);

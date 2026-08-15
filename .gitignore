@@ -1,2 +1,7 @@
 research_report_nail_hair_algorithms.md
 remix-nail-hair-pro.zip
+node_modules/
+.vercel/
+# 运行时数据（本地文件存储；Vercel 上改用 KV，不应入库/部署）
+server/data.json
+server/cache.json

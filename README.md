@@ -18,18 +18,25 @@
 - 服务端：纯 Node.js（内置 `http` 模块，零第三方依赖，`server.mjs` 为入口）
 - 前端：原生 ES Module + 原生 CSS（无构建步骤，无框架）
 - 关键点检测：MediaPipe Tasks Vision（`@mediapipe/tasks-vision`），运行时按需从 CDN 动态加载 WASM 与模型，不打包、不 `npm install`；首次使用时下载，之后走浏览器缓存，离线/加载失败自动降级
-- 数据存储：单文件 `server/data.json`（原子写入：临时文件 + rename）
+- 数据存储：本地单文件 `server/data.json`（原子写入：临时文件 + rename）；部署到 Vercel 时自动切换为 Vercel KV（零依赖、仅 `fetch` 的 Upstash Redis REST）
 - 出网：默认 `global fetch`；检测到 `HTTPS_PROXY` 等环境变量时自动切换为 `undici` 代理通道
 
 ## 目录结构
 
 ```
 nail-hair-inspo/
-├── server.mjs              # 服务端入口：静态托管 + /api 路由
+├── server.mjs              # 本地启动入口（薄封装，调用 server/app.mjs）
 ├── server/
-│   ├── store.mjs           # 数据持久化（密钥/用户/统计/设置/口令）
+│   ├── app.mjs             # 请求处理核心（本地与 Vercel 共用的 handler）
+│   ├── store.mjs           # 数据持久化（本地文件 / Vercel KV 双后端）
 │   ├── providers.mjs       # AI 引擎适配层（降级链 + 临时图床 + 代理）
-│   └── data.json           # 运行时数据（首启自动生成）
+│   ├── cache.mjs           # 结果缓存（pHash 去重；Vercel 上仅内存态）
+│   ├── device.mjs          # IP / User-Agent 解析
+│   ├── userLearning.mjs    # 用户画像与推荐算法
+│   └── data.json           # 运行时数据（本地首启自动生成，不入库）
+├── api/
+│   └── [...path].js        # Vercel Serverless 函数入口（接管 /api/*）
+├── vercel.json             # Vercel 部署配置（rewrite + 函数超时）
 ├── index.html              # 用户端页面
 ├── admin.html              # 管理后台页面
 ├── js/
@@ -61,6 +68,33 @@ node server.mjs
 - 管理后台：http://localhost:3000/admin
 
 首次启动时，管理后台默认口令为 `admin123`，请登录后立即在后台修改。仅当 `server/data.json` 尚不存在时才会使用默认口令；数据文件一旦生成，口令即以其为准。
+
+## 部署到 Vercel
+
+本项目已改造为 Vercel Serverless Functions 架构：前端静态托管，后端 `/api/*` 由 `api/[...path].js` 单个 catch-all 函数处理，数据存储自动从本地文件切换为 Vercel KV。
+
+### 前置条件
+
+1. 注册 Vercel 账号，安装 CLI：`npm i -g vercel`
+2. 在 Vercel 控制台创建 KV 数据库（Storage → KV → Create），记下 REST 连接信息
+
+### 步骤
+
+1. 在 Vercel 项目设置（Settings → Environment Variables）配置环境变量：
+   - `KV_REST_API_URL`：Vercel KV 的 REST URL（形如 `https://xxx.upstash.io`）
+   - `KV_REST_API_TOKEN`：Vercel KV 的 REST Token
+   - 各 AI 引擎密钥（可选，也可登录管理后台填写）：`GEMINI_API_KEY`、`SILICONFLOW_API_KEY`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN`、`HUGGINGFACE_API_KEY`、`POLLINATIONS_API_KEY`、`IMGBB_API_KEY`
+2. 部署：
+   - 方式一（CLI）：项目根执行 `vercel` 按提示导入，或 `vercel deploy --prod`
+   - 方式二（Git 集成）：推送到 GitHub，在 Vercel 导入仓库自动部署
+3. 部署完成后访问站点，管理后台位于 `https://你的域名/admin`，首次登录口令 `admin123`，登录后请立即修改。
+
+### 注意事项
+
+- 函数超时：AI 生成较慢，Hobby 计划函数最大 60 秒（已在 `vercel.json` 配置 `maxDuration: 60`）；Pro 计划可提高到 300 秒。若频繁超时，建议升级 Pro 或在后台改用更快的引擎。
+- 请求体限制：Vercel 函数请求体上限约 4.5MB。前端已将图片压缩到最长边 896px、质量 0.82（约数百 KB），base64 后远小于上限，正常使用无碍。
+- 管理会话与结果缓存为内存态，函数冷启动/实例切换后失效（后台需重新登录；缓存 miss 只是少命中，不影响正确性）。
+- 密钥既可配在 Vercel 环境变量，也可登录管理后台填写（写入 KV），两者等价，服务端永不下发原文。
 
 ## 环境变量
 

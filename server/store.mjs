@@ -1,5 +1,18 @@
-/* 数据持久化：server/data.json（密钥 / 用户 / 统计 / 站点设置 / 管理员口令）
- * 写入采用 临时文件 + rename，尽量原子 */
+/* 数据持久化：密钥 / 用户 / 统计 / 站点设置 / 管理员口令
+ *
+ * 双后端存储：
+ *   - 本地开发：单文件 server/data.json（临时文件 + rename，尽量原子）
+ *   - Vercel Serverless：Vercel KV（Upstash Redis REST，零依赖、仅 fetch）
+ *
+ * Vercel 的 Serverless 函数无状态、文件系统只读，且多实例间不共享磁盘，
+ * 因此部署到 Vercel 时（运行时自动注入 VERCEL=1）改用 KV 持久化。
+ * 若部署到 Vercel 但未配置 KV 环境变量，则优雅降级为「仅内存态」——
+ * 数据不落盘、不崩溃，仅重启/冷启动后丢失。
+ *
+ * 对外 API 与旧版完全兼容：
+ *   - load() 仍为同步（读内存快照，顶层 await 已初始化）
+ *   - save() 仍为同步签名（本地同步写文件；Vercel fire-and-forget 写 KV）
+ *   - 新增 flush()：强制落地脏数据并等待在途写完成（Vercel 函数收尾调用） */
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -10,6 +23,12 @@ const FILE = path.join(DIR, 'data.json');
 const TMP = FILE + '.tmp';
 
 export const DEFAULT_PASSWORD = 'admin123';
+
+/* ---------- Vercel KV 后端检测 ---------- */
+const KV_URL = String(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/+$/, '');
+const KV_TOKEN = String(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '');
+const IS_VERCEL = !!process.env.VERCEL;
+const KV_KEY = 'nhi:data';
 
 const DEFAULTS = () => ({
   version: 1,
@@ -45,41 +64,106 @@ const DEFAULTS = () => ({
 
 let cache = null;
 
-export function load() {
-  if (cache) return cache;
+/* 把磁盘/KV 里的原始 JSON 与默认值做深度合并（空密钥回退到环境变量） */
+function mergeRaw(raw) {
+  const def = DEFAULTS();
+  const r = raw || {};
+  return {
+    ...def,
+    ...r,
+    settings: { ...def.settings, ...(r.settings || {}) },
+    keys: {
+      ...def.keys,
+      ...(r.keys || {}),
+      gemini: (r.keys && r.keys.gemini) || def.keys.gemini,
+      pollinations: (r.keys && r.keys.pollinations) || def.keys.pollinations,
+      siliconflow: (r.keys && r.keys.siliconflow) || def.keys.siliconflow,
+      huggingface: (r.keys && r.keys.huggingface) || def.keys.huggingface,
+      imgbb: (r.keys && r.keys.imgbb) || def.keys.imgbb,
+      cloudflare: {
+        accountId: (r.keys && r.keys.cloudflare && r.keys.cloudflare.accountId) || def.keys.cloudflare.accountId,
+        token: (r.keys && r.keys.cloudflare && r.keys.cloudflare.token) || def.keys.cloudflare.token
+      }
+    },
+    stats: { ...def.stats, ...(r.stats || {}) }
+  };
+}
+
+/* ---------- KV 读写（Upstash Redis REST，零依赖） ---------- */
+async function kvGet() {
+  const res = await fetch(`${KV_URL}/get/${KV_KEY}`, {
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}` }
+  });
+  if (!res.ok) throw new Error('KV get HTTP ' + res.status);
+  const j = await res.json().catch(() => null);
+  return j && typeof j.result === 'string' ? j.result : null;
+}
+
+async function kvSet(jsonStr) {
+  const res = await fetch(`${KV_URL}/pipeline`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([['SET', KV_KEY, jsonStr]])
+  });
+  if (!res.ok) throw new Error('KV set HTTP ' + res.status);
+}
+
+/* ---------- 模块加载时初始化内存快照 ---------- */
+async function bootstrap() {
+  if (cache) return;
+  if (IS_VERCEL) {
+    if (KV_URL && KV_TOKEN) {
+      try {
+        cache = mergeRaw(JSON.parse((await kvGet()) || '{}'));
+        return;
+      } catch (e) {
+        console.error('[store] KV 读取失败，改用内存态', e.message);
+      }
+    } else {
+      console.error('[store] 已部署到 Vercel 但未配置 KV_REST_API_URL / KV_REST_API_TOKEN，数据将不持久化');
+    }
+    cache = DEFAULTS();
+    return;
+  }
+  // 本地：同步读文件
   try {
-    const raw = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    const def = DEFAULTS();
-    cache = {
-      ...def,
-      ...raw,
-      settings: { ...def.settings, ...(raw.settings || {}) },
-      keys: {
-        ...def.keys,
-        ...(raw.keys || {}),
-        gemini: (raw.keys && raw.keys.gemini) || def.keys.gemini,
-        pollinations: (raw.keys && raw.keys.pollinations) || def.keys.pollinations,
-        siliconflow: (raw.keys && raw.keys.siliconflow) || def.keys.siliconflow,
-        huggingface: (raw.keys && raw.keys.huggingface) || def.keys.huggingface,
-        imgbb: (raw.keys && raw.keys.imgbb) || def.keys.imgbb,
-        cloudflare: {
-          accountId: (raw.keys && raw.keys.cloudflare && raw.keys.cloudflare.accountId) || def.keys.cloudflare.accountId,
-          token: (raw.keys && raw.keys.cloudflare && raw.keys.cloudflare.token) || def.keys.cloudflare.token
-        }
-      },
-      stats: { ...def.stats, ...(raw.stats || {}) }
-    };
+    cache = mergeRaw(JSON.parse(fs.readFileSync(FILE, 'utf8')));
   } catch {
     cache = DEFAULTS();
   }
+}
+await bootstrap();
+
+export function load() {
+  if (!cache) cache = DEFAULTS();
   return cache;
 }
 
+/* ---------- 写回：本地同步写文件；Vercel fire-and-forget 写 KV ---------- */
+let pendingWrites = [];
+
 export function save() {
+  dirty = false;
+  if (IS_VERCEL) {
+    if (!KV_URL || !KV_TOKEN) return;   // 未配 KV，仅内存态
+    const p = kvSet(JSON.stringify(cache))
+      .catch(err => console.error('[store] KV 写入失败', err.message))
+      .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
+    pendingWrites.push(p);
+    return;
+  }
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(TMP, JSON.stringify(cache, null, 2));
   fs.renameSync(TMP, FILE);
-  dirty = false;
+}
+
+/* 强制落地：本地由 exit 钩子兜底；Vercel 由函数收尾调用，确保在途写完成 */
+export async function flush() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  if (dirty) { dirty = false; save(); }
+  if (pendingWrites.length) {
+    await Promise.allSettled(pendingWrites.slice());
+  }
 }
 
 /* ---------- 防抖写入：合并高频改动，降低磁盘 I/O 与序列化开销 ----------
@@ -376,4 +460,3 @@ export function updateRecommendationSettings(patch = {}) {
   Object.assign(d.settings.recommendation, patch);
   return d.settings.recommendation;
 }
-

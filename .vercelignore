@@ -1,0 +1,9 @@
+# Vercel 部署时忽略：运行时数据不应上传（Vercel 上用 KV 持久化）
+server/data.json
+server/cache.json
+.git
+.gitignore
+README.md
+server.mjs
+.vercelignore
+research_report_nail_hair_algorithms.md
