@@ -14,13 +14,13 @@
 .btn:active { transform: scale(0.96); box-shadow: 1px 1px 0 rgba(92, 74, 66, 0.15); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
-.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary { background: var(--primary); color: var(--ink-strong); }
 .btn-primary:hover:not(:disabled) { background: var(--primary-deep); }
-.btn-lav { background: var(--lav); color: #fff; }
+.btn-lav { background: var(--lav); color: var(--ink-strong); }
 .btn-mint { background: var(--mint); color: var(--ink-strong); }
 .btn-ghost { background: var(--bg2); }
-.btn-danger { background: var(--danger); color: #fff; }
-.btn-sm { min-height: 36px; padding: 6px 14px; font-size: 0.88rem; }
+.btn-danger { background: var(--danger-deep); color: #fff; }
+.btn-sm { min-height: 40px; padding: 8px 16px; font-size: 0.88rem; }
 .btn-block { width: 100%; }
 
 /* ---- chip ---- */
@@ -55,6 +55,7 @@
   cursor: pointer; flex: 0 0 auto; width: 148px;
 }
 .insp-card:hover { transform: translateY(-3px) rotate(-0.5deg); box-shadow: 5px 6px 0 rgba(92, 74, 66, 0.16); }
+.insp-card:active { transform: scale(0.96); box-shadow: 1px 1px 0 rgba(92, 74, 66, 0.14); }
 .insp-card.selected { outline: 3px solid var(--primary); outline-offset: 2px; }
 .insp-card .thumb {
   position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
@@ -88,7 +89,7 @@
   box-shadow: var(--shadow-sticker-sm);
   animation: toast-in 0.25s ease;
 }
-.toast.err { background: var(--danger); }
+.toast.err { background: var(--danger-deep); }
 .toast.ok { background: #3E8F6B; }
 @keyframes toast-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
 
@@ -111,7 +112,7 @@
 .modal h3 { font-size: 1.3rem; margin-bottom: var(--sp-2); }
 .modal .modal-x {
   position: absolute; top: 10px; right: 12px;
-  width: 34px; height: 34px; padding: 0;
+  width: 40px; height: 40px; padding: 0;
   border: var(--bw) solid var(--line); border-radius: 50%;
   background: var(--bg); color: var(--ink);
   font-size: 1.15rem; line-height: 1; cursor: pointer;
@@ -146,7 +147,7 @@
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--primary); border: var(--bw) solid var(--line);
-  color: #fff; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-strong); display: flex; align-items: center; justify-content: center;
   box-shadow: var(--shadow-sticker-sm); cursor: ew-resize;
 }
 .cmp .cmp-tag { position: absolute; top: 10px; font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--line); background: rgba(255, 248, 242, 0.92); z-index: 2; }
@@ -177,4 +178,4 @@
 /* ---- 子标签页 ---- */
 .subtabs { display: inline-flex; gap: 6px; background: var(--bg2); border: 2px solid var(--line-soft); border-radius: 999px; padding: 4px; margin-bottom: var(--sp-3); }
 .subtabs button { min-height: 36px; padding: 4px 18px; border-radius: 999px; font-weight: 700; font-size: 0.9rem; color: var(--muted); }
-.subtabs button[aria-selected="true"] { background: var(--lav); color: #fff; border: 2px solid var(--line); }
+.subtabs button[aria-selected="true"] { background: var(--lav); color: var(--ink-strong); border: 2px solid var(--line); }

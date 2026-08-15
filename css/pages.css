@@ -27,8 +27,10 @@
 .header-nav { display: none; gap: 4px; }
 .header-nav a {
   padding: 7px 16px; border-radius: 999px; font-weight: 700; font-size: 0.9rem; color: var(--muted);
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
 }
-.header-nav a[aria-current="page"] { background: var(--primary); color: #fff; border: 2px solid var(--line); }
+.header-nav a:active { transform: scale(0.95); }
+.header-nav a[aria-current="page"] { background: var(--primary); color: var(--ink-strong); border: 2px solid var(--line); }
 
 /* ---- 底部 tab（移动端） ---- */
 .tabbar {
@@ -46,6 +48,7 @@
 .tabbar a svg { width: 24px; height: 24px; }
 .tabbar a[aria-current="page"] { color: var(--primary-deep); }
 .tabbar a[aria-current="page"] svg { transform: scale(1.12) translateY(-1px); }
+.tabbar a:active { opacity: 0.7; }
 
 /* ---- 视图通用 ---- */
 [data-view] { animation: view-in 0.3s ease; }
@@ -130,6 +133,7 @@
   transition: transform 0.15s ease;
 }
 .entry-card:hover { transform: translateY(-3px); }
+.entry-card:active { transform: scale(0.97); }
 .entry-card.nail { background: linear-gradient(135deg, var(--primary-soft), #FFF6F9); }
 .entry-card.hair { background: linear-gradient(135deg, var(--lav-soft), #F6F3FF); }
 .entry-card .ic { position: absolute; right: -14px; bottom: -16px; opacity: 0.9; }
@@ -169,7 +173,7 @@
 .history-card .meta { padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .history-card .meta .t { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-card .meta .d { font-size: 0.7rem; color: var(--muted); }
-.history-card .del { color: var(--muted); flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+.history-card .del { color: var(--muted); flex: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
 .history-card .del:hover { color: var(--danger); background: var(--danger-soft); }
 .settings-note { font-size: 0.82rem; color: var(--muted); line-height: 1.6; background: var(--mint-soft); border: 2px dashed rgba(62, 143, 107, 0.4); border-radius: var(--r-s); padding: 10px 14px; margin-bottom: var(--sp-3); }
 
