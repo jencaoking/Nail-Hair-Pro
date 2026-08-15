@@ -1,0 +1,45 @@
+/* ============ 设计令牌：可爱风核心 ============ */
+:root {
+  /* 色板：低饱和高明度 */
+  --bg: #FFF8F2;            /* 底色奶油白 */
+  --bg2: #FFFDFB;
+  --surface: #FFFFFF;
+  --ink: #5C4A42;           /* 可可棕（正文） */
+  --ink-strong: #4A3A33;
+  --muted: #9A857B;
+  --primary: #FF9BB3;       /* 蜜桃粉 */
+  --primary-deep: #F27E9C;
+  --primary-soft: #FFE3EA;
+  --lav: #C9B8F0;           /* 薰衣草 */
+  --lav-soft: #EFE9FC;
+  --mint: #B8E6D2;          /* 薄荷 */
+  --mint-soft: #E4F7EE;
+  --gold: #FFD66B;          /* 星星金 */
+  --danger: #E8837C;
+  --danger-soft: #FDEBE9;
+  --line: #5C4A42;          /* 贴纸描边 */
+  --line-soft: #F0E2D9;
+
+  /* 形状 */
+  --r-s: 12px;
+  --r-m: 18px;
+  --r-l: 26px;
+  --bw: 2.5px;              /* 贴纸描边宽 */
+  --shadow-sticker: 4px 4px 0 rgba(92, 74, 66, 0.15);
+  --shadow-sticker-sm: 3px 3px 0 rgba(92, 74, 66, 0.12);
+
+  /* 字体 */
+  --font-title: 'ZCOOL KuaiLe', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+
+  /* 间距 */
+  --sp-1: 6px;
+  --sp-2: 10px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+  --sp-5: 32px;
+  --sp-6: 48px;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --header-h: 60px;
+}

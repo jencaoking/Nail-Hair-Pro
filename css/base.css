@@ -1,0 +1,44 @@
+/* ============ 基础：reset / 排版 / 背景 ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.7;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* 可爱波点底纹 */
+  background-image: radial-gradient(rgba(255, 155, 179, 0.13) 3px, transparent 3.5px);
+  background-size: 26px 26px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-title); font-weight: 400; color: var(--ink-strong); line-height: 1.3; }
+
+img, video, svg { display: block; max-width: 100%; }
+img { height: auto; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+
+a { color: var(--primary-deep); text-decoration: none; }
+
+/* 可见焦点（键盘可达） */
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.container { max-width: 1080px; margin: 0 auto; padding: 0 var(--sp-3); }
+
+main { padding-top: calc(var(--header-h) + var(--sp-3)); padding-bottom: calc(76px + var(--safe-b)); }
+
+/* 动效偏好：一键关闭 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

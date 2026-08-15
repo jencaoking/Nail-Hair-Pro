@@ -1,0 +1,55 @@
+/* AI 统一入口（服务端代理版）
+ * 浏览器不再直连任何引擎、不持有密钥：统一 POST /api/tryon
+ * 接口签名与旧版一致，nails.js / hair.js 无需改动 */
+import { AIError, normalizeError } from './errors.js';
+import { blobToBase64 } from '../capture/preprocess.js';
+import { getClientId } from '../store/settings.js';
+
+/**
+ * @param {object} opts
+ * @param {Blob} opts.imageBlob 输入照片（JPEG）
+ * @param {string} opts.prompt 试戴 prompt
+ * @param {number} opts.width / opts.height 期望输出尺寸
+ * @param {AbortSignal} [opts.signal] 用户取消
+ * @param {function} [opts.onEngine] ({index,total,provider}) 引擎进度回调
+ * @returns {Promise<{blob:Blob, provider:{id:string,label:string}}>}
+ */
+export async function tryOn({ imageBlob, prompt, width, height, signal, onEngine }) {
+  const b64 = await blobToBase64(imageBlob);
+  if (onEngine) onEngine({ index: 1, total: 1, provider: { id: 'server', label: '魔法引擎' } });
+
+  let res;
+  try {
+    res = await fetch('/api/tryon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        clientId: getClientId(),
+        image: `data:image/jpeg;base64,${b64}`,
+        prompt,
+        width,
+        height
+      })
+    });
+  } catch (err) {
+    if (signal && signal.aborted) throw new AIError('UserCancel', '已取消');
+    throw new AIError('ServerDown', '生成服务没有响应');
+  }
+
+  if (signal && signal.aborted) throw new AIError('UserCancel', '已取消');
+
+  let j = null;
+  try { j = await res.json(); } catch { /* 非结构化响应 */ }
+
+  if (!res.ok || !j || !j.ok) {
+    const type = (j && j.error && j.error.type) || 'Network';
+    if (res.status === 401) throw new AIError('Network', '请求被拒绝');
+    throw new AIError(type, (j && j.error && j.error.message) || `服务返回 ${res.status}`);
+  }
+
+  const blob = await (await fetch(j.image)).blob();
+  return { blob, provider: j.provider };
+}
+
+export { normalizeError };
