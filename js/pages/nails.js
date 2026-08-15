@@ -85,6 +85,10 @@ export function createTryOnPage(opts) {
 
   camera = createCamera(video);
 
+  /* ---------- 显隐切换：用 class 与 hidden 双保险，兼容部分 WebView/Safari 对 hidden 属性的不一致支持 */
+  const show = el => { if (!el) return; el.hidden = false; el.classList.remove('is-hidden'); };
+  const hide = el => { if (!el) return; el.hidden = true;  el.classList.add('is-hidden'); };
+
   /* ---------- 源面板交互 ---------- */
   sourceEl.addEventListener('click', async e => {
     const act = e.target.closest('[data-act]')?.dataset.act;
@@ -131,12 +135,12 @@ export function createTryOnPage(opts) {
     try {
       await camera.start();
       zone.classList.add('has-media');
-      zoneEmpty.hidden = true;
-      video.hidden = false;
-      capturedImg.hidden = true;
-      retakeBtn.hidden = true;
-      camCtrl.hidden = false;
-      camTip.hidden = false;
+      hide(zoneEmpty);
+      show(video);
+      hide(capturedImg);
+      hide(retakeBtn);
+      show(camCtrl);
+      show(camTip);
     } catch (err) {
       openModal({
         title: '相机没能打开',
@@ -168,11 +172,11 @@ export function createTryOnPage(opts) {
 
   function stopCameraUI() {
     camera.stop();
-    video.hidden = true;
-    camCtrl.hidden = true;
-    camTip.hidden = true;
+    hide(video);
+    hide(camCtrl);
+    hide(camTip);
     if (photoBlob) showPhoto();
-    else { zone.classList.remove('has-media'); zoneEmpty.hidden = false; }
+    else { zone.classList.remove('has-media'); show(zoneEmpty); }
   }
 
   function setPhoto(blob, phash = null) {
@@ -186,22 +190,22 @@ export function createTryOnPage(opts) {
 
   function showPhoto() {
     capturedImg.src = photoUrl;
-    capturedImg.hidden = false;
+    show(capturedImg);
     zone.classList.add('has-media');
-    zoneEmpty.hidden = true;
-    video.hidden = true;
-    retakeBtn.hidden = false;
+    hide(zoneEmpty);
+    hide(video);
+    show(retakeBtn);
   }
 
   function resetPhoto() {
     photoBlob = null;
     photoPhash = null;
     if (photoUrl) { URL.revokeObjectURL(photoUrl); photoUrl = null; }
-    capturedImg.hidden = true;
+    hide(capturedImg);
     capturedImg.removeAttribute('src');
-    retakeBtn.hidden = true;
+    hide(retakeBtn);
     zone.classList.remove('has-media');
-    zoneEmpty.hidden = false;
+    show(zoneEmpty);
     updateGenerateLabel();
   }
 
@@ -257,8 +261,8 @@ export function createTryOnPage(opts) {
 
     abortCtrl = new AbortController();
     generateBtn.disabled = true;
-    cancelBtn.hidden = false;
-    engineBox.hidden = false;
+    show(cancelBtn);
+    show(engineBox);
     renderLoading();
     let phraseIdx = 0;
     phraseTimer = setInterval(() => {
@@ -303,8 +307,8 @@ export function createTryOnPage(opts) {
       clearInterval(phraseTimer);
       abortCtrl = null;
       generateBtn.disabled = false;
-      cancelBtn.hidden = true;
-      engineBox.hidden = true;
+      hide(cancelBtn);
+      hide(engineBox);
       engineBar.style.width = '20%';
     }
   }
