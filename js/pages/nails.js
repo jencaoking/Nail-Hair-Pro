@@ -24,6 +24,7 @@ export function createTryOnPage(opts) {
 
   let photoBlob = null;
   let photoUrl = null;
+  let photoPhash = null;
   let selectedInspId = null;
   let camera = null;
   let abortCtrl = null;
@@ -107,11 +108,11 @@ export function createTryOnPage(opts) {
     fileInput.value = '';
     if (!file) return;
     try {
-      const blob = await toJpegBlob(file, {
+      const { blob, phash } = await toJpegBlob(file, {
         enhance: isEnhance(),
         subject: cat === 'nail' ? 'skin' : 'none'
       });
-      setPhoto(blob);
+      setPhoto(blob, phash);
       toast('照片准备好啦，选个款式试试');
     } catch (e) {
       toast('这张图片读取失败了，换一张试试', 'err');
@@ -150,15 +151,18 @@ export function createTryOnPage(opts) {
 
   async function takeShot() {
     let blob = await camera.capture();
+    let phash = null;
     stopCameraUI();
     // 拍照路径同样经过增强预处理（主体裁剪/光照/自适应质量）
     try {
-      blob = await toJpegBlob(blob, {
+      const r = await toJpegBlob(blob, {
         enhance: isEnhance(),
         subject: cat === 'nail' ? 'skin' : 'none'
       });
+      blob = r.blob;
+      phash = r.phash;
     } catch (e) { /* 增强失败则退回原始照片 */ }
-    setPhoto(blob);
+    setPhoto(blob, phash);
     toast('拍到啦');
   }
 
@@ -171,9 +175,10 @@ export function createTryOnPage(opts) {
     else { zone.classList.remove('has-media'); zoneEmpty.hidden = false; }
   }
 
-  function setPhoto(blob) {
+  function setPhoto(blob, phash = null) {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     photoBlob = blob;
+    photoPhash = phash;
     photoUrl = URL.createObjectURL(blob);
     showPhoto();
     updateGenerateLabel();
@@ -190,6 +195,7 @@ export function createTryOnPage(opts) {
 
   function resetPhoto() {
     photoBlob = null;
+    photoPhash = null;
     if (photoUrl) { URL.revokeObjectURL(photoUrl); photoUrl = null; }
     capturedImg.hidden = true;
     capturedImg.removeAttribute('src');
@@ -266,6 +272,7 @@ export function createTryOnPage(opts) {
         prompt,
         width,
         height,
+        phash: photoPhash,
         signal: abortCtrl.signal,
         onEngine: ({ index, total, provider: p }) => {
           engineBar.style.width = '62%';

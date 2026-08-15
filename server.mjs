@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 import * as store from './server/store.mjs';
 import { tryOn, buildChain, providers, byId, AIError, normalizeError, initNet } from './server/providers.mjs';
+import * as cache from './server/cache.mjs';
 
 /* ---------- 管理员会话（内存态，重启失效） ---------- */
 const sessions = new Map();
@@ -96,22 +97,44 @@ async function handleTryon(req, res) {
   const width = Math.min(1440, Math.max(256, Number(body.width) || 1024));
   const height = Math.min(1440, Math.max(256, Number(body.height) || 768));
   const blobIn = new Blob([Buffer.from(img.b64, 'base64')], { type: img.mime });
+  const prompt = String(body.prompt);
+
+  /* 结果缓存：感知哈希 + prompt 去重，命中直接返回，跳过 API 调用 */
+  const phashHex = typeof body.phash === 'string' && /^[0-9a-f]{16}$/i.test(body.phash) ? body.phash.toLowerCase() : null;
+  if (phashHex) {
+    const hit = cache.lookup(phashHex, prompt);
+    if (hit.hit) {
+      store.recordEvent({ clientId, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, err: hit.exact ? 'cache-hit' : `cache-fuzzy(${hit.dist})` });
+      store.save();
+      return json(res, 200, {
+        ok: true,
+        image: `data:${hit.entry.mime || 'image/png'};base64,${hit.entry.image}`,
+        provider: { id: hit.entry.provider || 'cache', label: hit.entry.provider || '缓存' },
+        cached: true,
+        ms: Date.now() - t0
+      });
+    }
+  }
 
   let providerUsed = '';
   try {
     const { blob, provider } = await tryOn({
       imageBlob: blobIn,
-      prompt: String(body.prompt),
+      prompt,
       width, height,
       ctx: { keys: d.keys, settings: d.settings },
       onEngine: ({ provider }) => { providerUsed = provider.id; }
     });
     const b64 = Buffer.from(await blob.arrayBuffer()).toString('base64');
     const mime = blob.type || 'image/png';
+    // 写入缓存（含 pHash，供后续模糊匹配）
+    if (phashHex) {
+      cache.store(phashHex, prompt, b64, mime, provider.id);
+    }
     store.touchUser(clientId, { count: 1 });
     store.recordEvent({ clientId, provider: provider.id, ok: true, ms: Date.now() - t0 });
     store.save();
-    return json(res, 200, { ok: true, image: `data:${mime};base64,${b64}`, provider: { id: provider.id, label: provider.label }, ms: Date.now() - t0 });
+    return json(res, 200, { ok: true, image: `data:${mime};base64,${b64}`, provider: { id: provider.id, label: provider.label }, cached: false, ms: Date.now() - t0 });
   } catch (err) {
     const e = normalizeError(err);
     store.recordEvent({ clientId, provider: providerUsed, ok: false, ms: Date.now() - t0, err: e.message });

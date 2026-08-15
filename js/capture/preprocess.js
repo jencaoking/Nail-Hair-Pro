@@ -10,7 +10,8 @@ import {
   analyzeLuminance,
   gammaFor,
   applyGamma,
-  cropToRegion
+  cropToRegion,
+  phash
 } from './analyze.js';
 
 export async function toJpegBlob(source, {
@@ -39,6 +40,7 @@ export async function toJpegBlob(source, {
 
   let outCanvas = canvas;
   let outQuality = quality;
+  let pHash = null;
 
   if (enhance) {
     let imageData = ctx.getImageData(0, 0, w, h);
@@ -68,9 +70,16 @@ export async function toJpegBlob(source, {
     outQuality = adaptiveQuality(imageData, { minQ: 0.7, maxQ: 0.95 });
   }
 
+  // 计算感知哈希（用于服务端结果缓存/相似去重），基于最终输出画布
+  try {
+    const finalCtx = outCanvas.getContext('2d', { willReadFrequently: true });
+    const finalData = finalCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+    pHash = phash(finalData);
+  } catch (e) { pHash = null; }
+
   const blob = await new Promise(r => outCanvas.toBlob(r, 'image/jpeg', outQuality));
   if (!blob) throw new Error('图片处理失败');
-  return blob;
+  return { blob, phash: pHash };
 }
 
 function loadViaImgEl(source) {

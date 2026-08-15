@@ -162,3 +162,41 @@ export function applyGamma(imageData, gamma) {
   }
   return imageData;
 }
+
+/* ---------- 4. 感知哈希（pHash，64bit） ----------
+ * 8x8 低频块均值阈值，用于服务端结果缓存与相似输入去重。
+ * 返回 16 位 hex 字符串（BigInt 无法直接 JSON 序列化，故用 hex）。 */
+export function phash(imageData) {
+  const { data, width, height } = imageData;
+  const size = 32;
+  const gray = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const sx = Math.min(width - 1, (x * width / size) | 0);
+      const sy = Math.min(height - 1, (y * height / size) | 0);
+      const i = (sy * width + sx) * 4;
+      gray[y * size + x] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+  }
+  const block = new Float32Array(64);
+  let sum = 0;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      let acc = 0;
+      for (let dy = 0; dy < 4; dy++) {
+        for (let dx = 0; dx < 4; dx++) {
+          acc += gray[(y * 4 + dy) * size + (x * 4 + dx)];
+        }
+      }
+      const v = acc / 16;
+      block[y * 8 + x] = v;
+      sum += v;
+    }
+  }
+  const mean = sum / 64;
+  let hash = 0n;
+  for (let i = 0; i < 64; i++) {
+    if (block[i] >= mean) hash |= (1n << BigInt(63 - i));
+  }
+  return hash.toString(16).padStart(16, '0');
+}
