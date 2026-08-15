@@ -1,6 +1,9 @@
 /* ============ 基础：reset / 排版 / 背景 ============ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* 保证 hidden 属性真正隐藏元素，避免被下方 img/video display:block 覆盖 */
+[hidden] { display: none !important; }
+
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
