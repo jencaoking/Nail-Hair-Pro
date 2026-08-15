@@ -108,31 +108,39 @@ async function kvSet(jsonStr) {
   if (!res.ok) throw new Error('KV set HTTP ' + res.status);
 }
 
-/* ---------- 模块加载时初始化内存快照 ---------- */
-async function bootstrap() {
-  if (cache) return;
-  if (IS_VERCEL) {
-    if (KV_URL && KV_TOKEN) {
-      try {
-        cache = mergeRaw(JSON.parse((await kvGet()) || '{}'));
-        return;
-      } catch (e) {
-        console.error('[store] KV 读取失败，改用内存态', e.message);
-      }
-    } else {
-      console.error('[store] 已部署到 Vercel 但未配置 UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN，数据将不持久化');
-    }
-    cache = DEFAULTS();
-    return;
-  }
-  // 本地：同步读文件
+/* ---------- 内存快照初始化 ----------
+ * 本地：模块加载时同步读文件（load() 立即可用）
+ * Vercel：异步从 KV 加载，由 ensureLoaded() 触发（handler 开头 await）。
+ * 不用顶层 await，避免 @vercel/node 打包时的不兼容。 */
+if (!IS_VERCEL) {
   try {
     cache = mergeRaw(JSON.parse(fs.readFileSync(FILE, 'utf8')));
   } catch {
     cache = DEFAULTS();
   }
 }
-await bootstrap();
+
+let readyPromise = null;
+
+export function ensureLoaded() {
+  if (cache) return Promise.resolve();
+  if (!readyPromise) {
+    readyPromise = (async () => {
+      if (KV_URL && KV_TOKEN) {
+        try {
+          cache = mergeRaw(JSON.parse((await kvGet()) || '{}'));
+          return;
+        } catch (e) {
+          console.error('[store] KV 读取失败，改用内存态', e.message);
+        }
+      } else {
+        console.error('[store] 已部署到 Vercel 但未配置 UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN，数据将不持久化');
+      }
+      cache = DEFAULTS();
+    })();
+  }
+  return readyPromise;
+}
 
 export function load() {
   if (!cache) cache = DEFAULTS();

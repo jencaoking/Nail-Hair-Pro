@@ -25,8 +25,21 @@ import {
 /* 项目根目录（本文件位于 server/ 下，上溯一级） */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-await initNet();
-export const boot = store.initAdmin();
+/* ---------- 懒初始化（避免模块顶层 await，兼容 @vercel/node 打包） ---------- */
+let readyPromise = null;
+let boot = { firstRun: false };
+
+export function ready() {
+  if (!readyPromise) {
+    readyPromise = (async () => {
+      await store.ensureLoaded();   // Vercel 下从 KV 加载；本地已同步就绪
+      await initNet();              // 检测代理环境，切换出网通道
+      boot = store.initAdmin();     // 数据就绪后再初始化管理员口令
+      return boot;
+    })();
+  }
+  return readyPromise;
+}
 
 /* ---------- 管理员会话（内存态，重启失效） ---------- */
 const sessions = new Map();
@@ -601,6 +614,7 @@ function serveStatic(req, res, pathname) {
 
 /* ---------- 请求入口（本地与 Vercel 共用） ---------- */
 export async function handler(req, res) {
+  await ready();
   const url = new URL(req.url, 'http://localhost');
   try {
     if (url.pathname === '/api/config') return await handleConfig(req, res, url);

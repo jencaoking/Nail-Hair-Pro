@@ -3,10 +3,11 @@
  * 请求处理逻辑已抽到 server/app.mjs（本地与 Vercel Serverless 共用）。
  * Vercel 部署入口见 api/[...path].js，此处仅用于本地开发。 */
 import http from 'node:http';
-import { handler, boot } from './server/app.mjs';
+import { handler, ready } from './server/app.mjs';
 import * as store from './server/store.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
+const boot = await ready();   // 本地 ESM 支持顶层 await，提前初始化以便打印首启提示
 
 http.createServer(handler).listen(PORT, '0.0.0.0', () => {
   console.log('');

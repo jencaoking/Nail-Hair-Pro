@@ -5,12 +5,10 @@
   "type": "module",
   "description": "莓好灵感屋 · AI 试美甲 / 试发色 / 试发型",
   "scripts": {
-    "dev": "node server.mjs",
-    "start": "node server.mjs",
-    "build": "echo 'Build complete'"
+    "dev": "node server.mjs"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "dependencies": {}
 }

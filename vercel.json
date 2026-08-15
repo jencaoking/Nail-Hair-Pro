@@ -1,13 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "rewrites": [
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/admin/", "destination": "/admin.html" }
+  "builds": [
+    { "src": "api/*.js", "use": "@vercel/node", "config": { "maxDuration": 60 } },
+    { "src": "*.html", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" },
+    { "src": "assets/**", "use": "@vercel/static" }
   ],
-  "functions": {
-    "api/[...path].js": {
-      "maxDuration": 60
-    }
-  }
+  "routes": [
+    { "src": "/admin", "dest": "/admin.html" },
+    { "src": "/admin/", "dest": "/admin.html" }
+  ]
 }
