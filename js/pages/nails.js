@@ -6,6 +6,7 @@ import { toJpegBlob } from '../capture/preprocess.js';
 import { isEnhance } from '../store/settings.js';
 import { renderInspCard, byId, byCat } from '../data/inspirations.js';
 import { buildPrompt, genSize } from '../data/prompts.js';
+import { detectStructure } from '../ai/landmarks.js';
 import { getSamplePhoto } from '../data/samples.js';
 import { tryOn } from '../ai/api.js';
 import { normalizeError, copyFor } from '../ai/errors.js';
@@ -34,12 +35,17 @@ export function createTryOnPage(opts) {
   let photoBlob = null;
   let photoUrl = null;
   let photoPhash = null;
+  let photoStructure = null;   // 关键点检测结果（hand/face），未就绪为 null
+  let structurePromise = null; // 进行中的检测 promise
   let selectedInspId = null;
   let camera = null;
   let abortCtrl = null;
   let phraseTimer = null;
   let lastResultBlob = null;
   let lastProvider = null;
+
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const detectSubject = () => (currentCategory() === 'nail' ? 'hand' : 'face');
 
   const currentCategory = () => (getCat ? getCat() : cat);
 
@@ -76,6 +82,7 @@ export function createTryOnPage(opts) {
       </div>
       <video hidden playsinline muted></video>
       <img class="captured" hidden alt="已选照片">
+      <span class="chip detect-badge" hidden aria-live="polite"></span>
       <span class="chip cam-tip" hidden>✨ 把${cat === 'nail' ? '手指' : '脸部'}置于画面中心</span>
       <button class="btn btn-sm btn-ghost retake" hidden data-act="retake">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -126,6 +133,7 @@ export function createTryOnPage(opts) {
   const retakeBtn = q('.retake');
   const camCtrl = q('.cam-ctrl');
   const camTip = q('.cam-tip');
+  const detectBadge = q('.detect-badge');
   const fileInput = q('input[type="file"]');
   const generateBtn = q('[data-act="generate"]');
   const cancelBtn = q('[data-act="cancel"]');
@@ -309,6 +317,50 @@ export function createTryOnPage(opts) {
     photoUrl = URL.createObjectURL(blob);
     showPhoto();
     updateGenerateLabel();
+    runDetection(blob);
+  }
+
+  /* ---------- 关键点检测预处理：异步识别手部/面部结构，注入生成 prompt ---------- */
+  function runDetection(blob) {
+    const subject = detectSubject();
+    photoStructure = null;
+    structurePromise = null;
+    updateDetectBadge('detecting', subject);
+
+    structurePromise = detectStructure(blob, subject)
+      .then(structure => {
+        photoStructure = structure;
+        updateDetectBadge(structure ? 'done' : 'none', subject, structure);
+        return structure;
+      })
+      .catch(() => {
+        photoStructure = null;
+        updateDetectBadge('none', subject);
+        return null;
+      });
+  }
+
+  function updateDetectBadge(state, subject, structure) {
+    if (!detectBadge) return;
+    if (state === 'detecting') {
+      detectBadge.textContent = subject === 'hand' ? '🔍 AI 识别手部中…' : '🔍 AI 识别面部中…';
+      show(detectBadge);
+      return;
+    }
+    if (state === 'done' && structure) {
+      detectBadge.textContent = structure.kind === 'hand'
+        ? `✓ 已识别手部 · ${structure.fingers} 指`
+        : `✓ 已识别 · ${faceShapeLabel(structure.faceShape)}脸型`;
+      show(detectBadge);
+      // 3 秒后自动淡出，避免常驻遮挡
+      delay(3000).then(() => { if (photoStructure === structure) hide(detectBadge); });
+      return;
+    }
+    hide(detectBadge);
+  }
+
+  function faceShapeLabel(shape) {
+    return ({ round: '圆', square: '方', oval: '鹅蛋', heart: '心形', long: '长' })[shape] || shape;
   }
 
   function showPhoto() {
@@ -323,6 +375,9 @@ export function createTryOnPage(opts) {
   function resetPhoto() {
     photoBlob = null;
     photoPhash = null;
+    photoStructure = null;
+    structurePromise = null;
+    if (detectBadge) hide(detectBadge);
     if (photoUrl) { URL.revokeObjectURL(photoUrl); photoUrl = null; }
     hide(capturedImg);
     capturedImg.removeAttribute('src');
@@ -415,7 +470,12 @@ export function createTryOnPage(opts) {
     }
 
     const catKey = currentCategory();
-    const prompt = buildPrompt(catKey, selectedInspId, customInput.value);
+    // 等待关键点检测就绪（最多 1.5s）；未就绪则降级为无结构 prompt，不阻塞生成
+    let structure = photoStructure;
+    if (!structure && structurePromise) {
+      structure = await Promise.race([structurePromise, delay(1500).then(() => null)]);
+    }
+    const prompt = buildPrompt(catKey, selectedInspId, customInput.value, { structure });
     const { width, height } = genSize(aspect);
 
     abortCtrl = new AbortController();

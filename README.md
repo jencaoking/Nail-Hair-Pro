@@ -6,6 +6,7 @@
 
 - 美甲试戴：上传手部照片，试戴猫眼、法式、碎钻等精选款式
 - 美发试戴：上传头部照片，试换发色（如蜜桃棕、雾霾蓝）与发型（如锁骨发）
+- 关键点检测预处理：生成前用 MediaPipe 识别手部（手指数量、左右手、光照方向）与面部（脸型、朝向），把结构信息注入 prompt，让 AI 更准地理解手部与脸型；检测失败时静默降级，不影响生成
 - 灵感库：内置 52 款精选灵感，用户端按美甲 / 美发分类浏览
 - 我的：记录试戴历史，展示每用户每日剩余额度
 - 多 AI 引擎：支持 Pollinations、Gemini、SiliconFlow、Cloudflare、HuggingFace 等，服务端自动降级
@@ -16,6 +17,7 @@
 
 - 服务端：纯 Node.js（内置 `http` 模块，零第三方依赖，`server.mjs` 为入口）
 - 前端：原生 ES Module + 原生 CSS（无构建步骤，无框架）
+- 关键点检测：MediaPipe Tasks Vision（`@mediapipe/tasks-vision`），运行时按需从 CDN 动态加载 WASM 与模型，不打包、不 `npm install`；首次使用时下载，之后走浏览器缓存，离线/加载失败自动降级
 - 数据存储：单文件 `server/data.json`（原子写入：临时文件 + rename）
 - 出网：默认 `global fetch`；检测到 `HTTPS_PROXY` 等环境变量时自动切换为 `undici` 代理通道
 
@@ -34,7 +36,7 @@ nail-hair-inspo/
 │   ├── main.js             # 用户端入口：路由注册、引擎徽章
 │   ├── admin.js            # 管理后台入口
 │   ├── router.js           # 前端哈希路由
-│   ├── ai/                 # 前端 AI 注册与调用（providers/、api.js、registry.js、errors.js）
+│   ├── ai/                 # 前端 AI 注册与调用（providers/、api.js、registry.js、errors.js、landmarks.js 关键点检测）
 │   ├── pages/              # 页面模块（home / nails / hair / mine）
 │   ├── data/               # 灵感数据与提示词（inspirations.js、prompts.js）
 │   ├── store/              # 客户端存储（db.js、settings.js）

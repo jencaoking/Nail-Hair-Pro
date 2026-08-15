@@ -13,22 +13,52 @@ export function buildNailPrompt(desc, opts = {}) {
   else if (isCatEye) finishDesc = 'deep 3D magnetic cat-eye light band with shimmering galaxy depth';
   else if (isJelly) finishDesc = 'translucent glass-skin jelly effect with luminous sheer depth';
 
+  // 手部关键点检测结果 → 注入结构上下文，帮助 AI 准确理解手部解剖与光照
+  const st = opts.structure;
+  let handHint = '';
+  if (st && st.kind === 'hand') {
+    const bits = [];
+    if (typeof st.fingers === 'number' && st.fingers > 0) {
+      bits.push(`${st.fingers} fingers visible with relaxed natural posture`);
+    }
+    if (st.handSide) bits.push(`${st.handSide} hand`);
+    if (st.light && st.light.english) bits.push(st.light.english);
+    if (bits.length) {
+      handHint = ` Hand anatomy detected: ${bits.join(', ')}. Render the nail design to precisely match this hand structure, finger angles, and lighting direction.`;
+    }
+  }
+
   return `High-end beauty retouching: modify the fingernails in this photo to showcase a flawless "${desc}" nail design. ` +
     `Ensure precision nail shape refinement (almond/coffin/oval/square according to natural curve), ${finishDesc}, seamless cuticle alignment, ` +
-    `and realistic micro-shadows along the nail plate. ` +
+    `and realistic micro-shadows along the nail plate.${handHint} ` +
     `CRITICAL PRESERVATION: Keep the original hand posture, exact finger proportions, natural skin texture, knuckles, skin tone, rings/jewelry, and background identical without distortion. ` +
     `Commercial manicure photography, 8k resolution, crisp focus.`;
 }
 
 export function buildHairColorPrompt(desc, opts = {}) {
+  const st = opts.structure;
+  let faceHint = '';
+  if (st && st.kind === 'face') {
+    faceHint = ` The subject has a ${st.faceShape} face. Keep the hairline and face contours natural while recoloring.`;
+  }
   return `Professional salon colorist photo edit: precisely transform only the hair color of the person in this photo into "${desc}". ` +
-    `Incorporate natural dimensional balayage depth, seamless root transition, glossy salon toning finish, and realistic light refraction on individual hair strands. ` +
+    `Incorporate natural dimensional balayage depth, seamless root transition, glossy salon toning finish, and realistic light refraction on individual hair strands.${faceHint} ` +
     `CRITICAL PRESERVATION: Strictly preserve the original face, facial identity, facial structure, skin tone, eye color, makeup, expression, hairstyle shape, hair length, clothing, and background completely intact. ` +
     `Prevent color bleeding onto skin, forehead, or ears. High-fashion beauty magazine portrait, 8k ultra-sharp detail.`;
 }
 
 export function buildHairStylePrompt(desc, opts = {}) {
+  const st = opts.structure;
+  let faceHint = '';
+  if (st && st.kind === 'face') {
+    faceHint = ` Style the hair to flatter the subject's ${st.faceShape} face shape for a harmonious, face-flattering silhouette.`;
+    if (st.orientation && st.orientation !== 'front') {
+      faceHint += ` Account for the ${st.orientation} head angle when shaping the layers and volume.`;
+    }
+    if (st.light && st.light.english) faceHint += ` Match the hairstyle shading to ${st.light.english}.`;
+  }
   return `Master hairstylist precision restyling: modify only the hairstyle and hair cut of the subject to "${desc}". ` +
+    `${faceHint} ` +
     `Render natural hair volume, airy texture, soft face-framing layers, delicate flyaway strands, and authentic hair physics while maintaining harmonious head proportions. ` +
     `CRITICAL PRESERVATION: Keep the exact same person, face shape, eyes, nose, lips, facial features, skin complexion, makeup, clothing, lighting direction, and background completely untouched. ` +
     `High-definition editorial studio photography, photorealistic, natural salon aesthetic.`;
