@@ -1,0 +1,16 @@
+{
+  "name": "nail-hair-pro",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "莓好灵感屋 · AI 试美甲 / 试发色 / 试发型",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "echo 'Build complete'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}

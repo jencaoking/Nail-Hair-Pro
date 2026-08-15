@@ -1,46 +1,237 @@
-/* ============ 设计令牌：可爱风核心 ============ */
+/* ============ Comic Style (漫画风格) Design System Tokens ============ */
 :root {
-  /* 色板：低饱和高明度 */
-  --bg: #FFF8F2;            /* 底色奶油白 */
-  --bg2: #FFFDFB;
-  --surface: #FFFFFF;
-  --ink: #5C4A42;           /* 可可棕（正文） */
-  --ink-strong: #4A3A33;
-  --muted: #9A857B;
-  --primary: #FF9BB3;       /* 蜜桃粉 */
-  --primary-deep: #F27E9C;
-  --primary-soft: #FFE3EA;
-  --lav: #C9B8F0;           /* 薰衣草 */
-  --lav-soft: #EFE9FC;
-  --mint: #B8E6D2;          /* 薄荷 */
-  --mint-soft: #E4F7EE;
-  --gold: #FFD66B;          /* 星星金 */
-  --danger: #E8837C;
-  --danger-deep: #C6504B;   /* 深红（危险按钮底，白字可读） */
-  --danger-soft: #FDEBE9;
-  --line: #5C4A42;          /* 贴纸描边 */
-  --line-soft: #F0E2D9;
+  --theme-mode: 'light';
 
-  /* 形状 */
-  --r-s: 12px;
-  --r-m: 18px;
-  --r-l: 26px;
-  --bw: 2.5px;              /* 贴纸描边宽 */
-  --shadow-sticker: 4px 4px 0 rgba(92, 74, 66, 0.15);
-  --shadow-sticker-sm: 3px 3px 0 rgba(92, 74, 66, 0.12);
+  /* 漫画核心色彩角色 (Comic Colors) */
+  --bg: #fffef0;               /* 漫画复古暖黄纸质背景 bg-[#fffef0] */
+  --bg2: #ffffff;              /* 纯白漫画面板 */
+  --bg-dark: #1a1a1a;          /* 浓重墨黑 bg-[#1a1a1a] */
+  --bg-subtle: #f7f3e8;        /* 浅调纸感 */
+  --surface: #ffffff;
+  --surface-comic: #fffef0;
+  --card-bg: #fffef0;
 
-  /* 字体 */
-  --font-title: 'ZCOOL KuaiLe', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* 文字 (High Contrast Ink Typography) */
+  --ink: #1a1a1a;              /* 正文墨黑 text-[#1a1a1a] */
+  --ink-strong: #1a1a1a;       /* 标题深墨黑 */
+  --muted: #4a4a4a;            /* 正文弱化高对比灰 text-[#4a4a4a] */
+  --text-white: #ffffff;
+
+  /* 漫画高冲击强调色 (Action Accents) */
+  --primary: #ef4444;          /* 漫画热血红 bg-[#ef4444] (POW!) */
+  --primary-deep: #dc2626;
+  --primary-soft: #fee2e2;
+
+  --blue: #3b82f6;             /* 漫画英雄蓝 bg-[#3b82f6] (BAM!) */
+  --blue-deep: #2563eb;
+  --blue-soft: #dbeafe;
+
+  --yellow: #facc15;           /* 漫画警示黄 bg-[#facc15] (ZAP!) */
+  --yellow-deep: #eab308;
+  --yellow-soft: #fef08a;
+
+  --green: #22c55e;            /* 漫画生机绿 bg-[#22c55e] */
+  --green-deep: #16a34a;
+  --green-soft: #dcfce7;
+
+  --lav: #3b82f6;              /* 映射为漫画蓝 */
+  --lav-deep: #2563eb;
+  --lav-soft: #dbeafe;
+
+  --mint: #22c55e;
+  --mint-soft: #dcfce7;
+
+  --gold: #facc15;
+  --gold-soft: #fef08a;
+
+  --danger: #ef4444;
+  --danger-deep: #dc2626;
+  --danger-soft: #fee2e2;
+
+  /* 边框：浓重墨线 (Thick Ink Border-4) */
+  --border-ink: #1a1a1a;
+  --border-w: 4px;
+  --border-w-sm: 3px;
+  --line: #1a1a1a;
+  --line-strong: #1a1a1a;
+  --line-soft: #1a1a1a;
+
+  /* 圆角 (Comic Style rounded-lg) */
+  --r-xs: 6px;
+  --r-s: 8px;
+  --r-m: 10px;
+  --r-l: 12px;
+  --r-full: 9999px;
+
+  /* 硬边偏移阴影 (Hard Offset Shadows) */
+  --shadow-comic-sm: 3px 3px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-comic: 4px 4px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-comic-md: 6px 6px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-comic-lg: 8px 8px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-comic-xl: 10px 10px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-comic-hover: 2px 2px 0px 0px rgba(26, 26, 26, 1);
+
+  /* 兼容旧 shadow 映射为硬边阴影 */
+  --shadow-sm: 3px 3px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-m: 4px 4px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-lg: 6px 6px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-primary: 4px 4px 0px 0px rgba(26, 26, 26, 1);
+  --shadow-lav: 4px 4px 0px 0px rgba(26, 26, 26, 1);
+
+  /* 漫画半调背景网点颜色 */
+  --dot-color: rgba(26, 26, 26, 0.12);
+
+  /* 漫画排版体系 */
+  --font-title: 'ZCOOL KuaiLe', Impact, 'Arial Black', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
-  /* 间距 */
+  /* 间距节奏 */
   --sp-1: 6px;
-  --sp-2: 10px;
-  --sp-3: 16px;
-  --sp-4: 24px;
-  --sp-5: 32px;
-  --sp-6: 48px;
+  --sp-2: 12px;
+  --sp-3: 18px;
+  --sp-4: 26px;
+  --sp-5: 36px;
+  --sp-6: 52px;
 
   --safe-b: env(safe-area-inset-bottom, 0px);
-  --header-h: 60px;
+  --header-h: 70px;
+  --tabbar-h: 68px;
+}
+
+/* ============ 暗黑模式 (Dark Mode / Night Comic) ============ */
+[data-theme="dark"] {
+  --theme-mode: 'dark';
+
+  /* 漫画暗夜核心底色体系 */
+  --bg: #141419;               /* 浓墨夜黑底色 */
+  --bg2: #1e1e26;              /* 面板层底色 */
+  --bg-dark: #0d0d12;          /* 极暗深黑 */
+  --bg-subtle: #272734;        /* 次级暗色面板 */
+  --surface: #1e1e26;          /* 主表面卡片 */
+  --surface-comic: #181820;
+  --card-bg: #1e1e26;
+
+  /* 暗黑模式高对比文字 */
+  --ink: #f4f4f8;              /* 高对比明晰主文字 */
+  --ink-strong: #ffffff;       /* 标题纯白高亮 */
+  --muted: #a3a3b8;            /* 次级文字柔和灰 */
+  --text-white: #ffffff;
+
+  /* 漫画强调色暗夜调优 (保持高饱和与高辨识度) */
+  --primary: #ff4d4f;          /* 鲜亮漫画红 */
+  --primary-deep: #f5222d;
+  --primary-soft: rgba(255, 77, 79, 0.22);
+
+  --blue: #60a5fa;             /* 英雄蓝 */
+  --blue-deep: #3b82f6;
+  --blue-soft: rgba(96, 165, 250, 0.22);
+
+  --yellow: #facc15;           /* 警示黄 (与暗黑对比极佳) */
+  --yellow-deep: #eab308;
+  --yellow-soft: rgba(250, 204, 21, 0.22);
+
+  --green: #4ade80;            /* 荧光绿 */
+  --green-deep: #22c55e;
+  --green-soft: rgba(74, 222, 128, 0.22);
+
+  --lav: #60a5fa;
+  --lav-deep: #3b82f6;
+  --lav-soft: rgba(96, 165, 250, 0.22);
+
+  --mint: #4ade80;
+  --mint-soft: rgba(74, 222, 128, 0.22);
+
+  --gold: #facc15;
+  --gold-soft: rgba(250, 204, 21, 0.22);
+
+  --danger: #ff4d4f;
+  --danger-deep: #f5222d;
+  --danger-soft: rgba(255, 77, 79, 0.22);
+
+  /* 边框：暗黑模式下极富表现力的对比墨线 */
+  --border-ink: #3c3c4e;
+  --line: #3c3c4e;
+  --line-strong: #54546c;
+  --line-soft: #2e2e3d;
+
+  /* 硬边偏移阴影 (Dark Mode Hard Solid Offset Shadows) */
+  --shadow-comic-sm: 3px 3px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-comic: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-comic-md: 6px 6px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-comic-lg: 8px 8px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-comic-xl: 10px 10px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-comic-hover: 2px 2px 0px 0px rgba(0, 0, 0, 0.9);
+
+  --shadow-sm: 3px 3px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-m: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-lg: 6px 6px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-primary: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+  --shadow-lav: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+
+  /* 暗夜网点 */
+  --dot-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 系统偏好暗黑模式回退支持 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --theme-mode: 'dark';
+    --bg: #141419;
+    --bg2: #1e1e26;
+    --bg-dark: #0d0d12;
+    --bg-subtle: #272734;
+    --surface: #1e1e26;
+    --surface-comic: #181820;
+    --card-bg: #1e1e26;
+
+    --ink: #f4f4f8;
+    --ink-strong: #ffffff;
+    --muted: #a3a3b8;
+    --text-white: #ffffff;
+
+    --primary: #ff4d4f;
+    --primary-deep: #f5222d;
+    --primary-soft: rgba(255, 77, 79, 0.22);
+
+    --blue: #60a5fa;
+    --blue-deep: #3b82f6;
+    --blue-soft: rgba(96, 165, 250, 0.22);
+
+    --yellow: #facc15;
+    --yellow-deep: #eab308;
+    --yellow-soft: rgba(250, 204, 21, 0.22);
+
+    --green: #4ade80;
+    --green-deep: #22c55e;
+    --green-soft: rgba(74, 222, 128, 0.22);
+
+    --lav: #60a5fa;
+    --lav-deep: #3b82f6;
+    --lav-soft: rgba(96, 165, 250, 0.22);
+
+    --mint: #4ade80;
+    --mint-soft: rgba(74, 222, 128, 0.22);
+
+    --gold: #facc15;
+    --gold-soft: rgba(250, 204, 21, 0.22);
+
+    --danger: #ff4d4f;
+    --danger-deep: #f5222d;
+    --danger-soft: rgba(255, 77, 79, 0.22);
+
+    --border-ink: #3c3c4e;
+    --line: #3c3c4e;
+    --line-strong: #54546c;
+    --line-soft: #2e2e3d;
+
+    --shadow-comic-sm: 3px 3px 0px 0px rgba(0, 0, 0, 0.9);
+    --shadow-comic: 4px 4px 0px 0px rgba(0, 0, 0, 0.9);
+    --shadow-comic-md: 6px 6px 0px 0px rgba(0, 0, 0, 0.9);
+    --shadow-comic-lg: 8px 8px 0px 0px rgba(0, 0, 0, 0.9);
+    --shadow-comic-xl: 10px 10px 0px 0px rgba(0, 0, 0, 0.9);
+    --shadow-comic-hover: 2px 2px 0px 0px rgba(0, 0, 0, 0.9);
+
+    --dot-color: rgba(255, 255, 255, 0.08);
+  }
 }

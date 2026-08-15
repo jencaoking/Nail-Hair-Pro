@@ -11,9 +11,9 @@ const page = createTryOnPage({
   resultEl: '#hair-result',
   stripEl: '#hair-strip',
   aspect: 'portrait',
-  phrases: ['正在分析发型…', '魔法换色中…', '快好了，再等等…'],
+  phrases: ['正在识别面部与发际轮廓…', 'AI 正在模拟自然发丝与光泽…', '精细调色中…', '即将完成…'],
   emptyTip: '拍一张头部照片，发色发型随心试',
-  customPlaceholder: '想试的样子，例如：奶茶灰大波浪'
+  customPlaceholder: '输入想试的样子，例如：奶茶灰大波浪加空气刘海'
 });
 
 /* 子标签：发色 / 发型 */
@@ -23,8 +23,8 @@ tabs.className = 'subtabs';
 tabs.setAttribute('role', 'tablist');
 tabs.setAttribute('aria-label', '发色或发型');
 tabs.innerHTML = `
-  <button role="tab" aria-selected="true" data-sub="hairColor">发色</button>
-  <button role="tab" aria-selected="false" data-sub="hairStyle">发型</button>`;
+  <button role="tab" aria-selected="true" data-sub="hairColor">🎨 潮流发色 (16)</button>
+  <button role="tab" aria-selected="false" data-sub="hairStyle">💇 流行发型 (12)</button>`;
 head.appendChild(tabs);
 
 const stripEl = document.querySelector('#hair-strip');
@@ -41,6 +41,11 @@ tabs.addEventListener('click', e => {
   tabs.querySelectorAll('[data-sub]').forEach(b =>
     b.setAttribute('aria-selected', String(b.dataset.sub === currentSub)));
   renderStrip();
+  page.renderPromptChips();
 });
 
-export default { onEnter: page.onEnter, onLeave: page.onLeave };
+export default {
+  onEnter: page.onEnter,
+  onLeave: page.onLeave,
+  selectInsp: page.selectInsp
+};

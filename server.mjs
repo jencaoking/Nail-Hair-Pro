@@ -16,6 +16,14 @@ const PORT = Number(process.env.PORT || 3000);
 import * as store from './server/store.mjs';
 import { tryOn, buildChain, providers, byId, AIError, normalizeError, initNet } from './server/providers.mjs';
 import * as cache from './server/cache.mjs';
+import { parseIp, parseUserAgent } from './server/device.mjs';
+import {
+  computeUserPersona,
+  recommendInspirations,
+  aggregateUserPersonas,
+  DEFAULT_REC_SETTINGS,
+  REC_PRESETS
+} from './server/userLearning.mjs';
 
 /* ---------- 管理员会话（内存态，重启失效） ---------- */
 const sessions = new Map();
@@ -62,16 +70,81 @@ async function handleConfig(req, res, url) {
   const clientId = safeClientId(url.searchParams.get('clientId'));
   const d = store.load();
   const chain = buildChain(d.keys, d.settings.preferred);
-  const u = clientId ? store.getUser(clientId) : null;
-  const dayCount = u && u.day === store.today() ? u.dayCount : 0;
+  const ip = parseIp(req);
+  const ua = req.headers['user-agent'] || '';
+  const dev = parseUserAgent(ua);
+
+  let u = null;
+  if (clientId) {
+    u = store.touchUser(clientId, { ip, userAgent: ua, device: dev.summary });
+  }
+
+  const quota = store.getUserQuotaInfo(u, d.settings.dailyLimit);
+
   json(res, 200, {
     ok: true,
     server: true,
     engines: chain.map(p => ({ id: p.id, label: p.label })),
     primary: chain[0] ? chain[0].label : '',
-    dailyLimit: d.settings.dailyLimit,
-    usedToday: dayCount,
-    announcement: d.settings.announcement || ''
+    dailyLimit: quota.dailyLimit,
+    effectiveLimit: quota.effectiveLimit,
+    usedToday: quota.dayCount,
+    remainingToday: quota.remainingToday,
+    isCustomLimit: quota.isCustomLimit,
+    bonusQuota: quota.bonusQuota,
+    announcement: d.settings.announcement || '',
+    recSettings: store.getRecommendationSettings()
+  });
+}
+
+async function handleUserBehavior(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req, 64 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
+  const clientId = safeClientId(body.clientId);
+  if (!clientId) return json(res, 400, { ok: false, message: '缺少有效 clientId' });
+
+  const ip = parseIp(req);
+  const ua = req.headers['user-agent'] || '';
+  const dev = parseUserAgent(ua);
+  store.touchUser(clientId, { ip, userAgent: ua, device: dev.summary });
+
+  if (Array.isArray(body.events) && body.events.length > 0) {
+    store.recordUserBehavior(clientId, body.events);
+    store.save();
+  }
+
+  const events = store.getUserEvents(clientId);
+  const recSettings = store.getRecommendationSettings();
+  const persona = computeUserPersona(events, recSettings);
+
+  return json(res, 200, { ok: true, persona });
+}
+
+async function handleRecommendations(req, res, url) {
+  const clientId = safeClientId(url.searchParams.get('clientId'));
+  const cat = url.searchParams.get('cat') || 'all';
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 12));
+
+  const events = clientId ? store.getUserEvents(clientId) : [];
+  const recSettings = store.getRecommendationSettings();
+  const persona = computeUserPersona(events, recSettings);
+
+  const recommendations = recommendInspirations(persona, {
+    cat,
+    limit,
+    customWeights: recSettings
+  });
+
+  return json(res, 200, {
+    ok: true,
+    persona: {
+      type: persona.personaType,
+      name: persona.personaName,
+      badge: persona.personaBadge,
+      confidence: persona.confidence,
+      topTags: persona.topTags
+    },
+    recommendations
   });
 }
 
@@ -86,12 +159,17 @@ async function handleTryon(req, res) {
   if (!img || img.b64.length < 100) return json(res, 400, { ok: false, error: { type: 'Network', message: '照片缺失或格式不支持' } });
   if (!body.prompt || String(body.prompt).length > 600) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述不合法' } });
 
+  const ip = parseIp(req);
+  const ua = req.headers['user-agent'] || '';
+  const dev = parseUserAgent(ua);
+
   const d = store.load();
-  const u = store.touchUser(clientId);
+  const u = store.touchUser(clientId, { ip, userAgent: ua, device: dev.summary });
   if (u.blocked) return json(res, 403, { ok: false, error: { type: 'Blocked', message: '访问已被站长限制' } });
-  const used = u.day === store.today() ? u.dayCount : 0;
-  if (used >= d.settings.dailyLimit) {
-    return json(res, 429, { ok: false, error: { type: 'Limit', message: `今天的 ${d.settings.dailyLimit} 次免费额度已用完，明天再来吧` } });
+
+  const quota = store.getUserQuotaInfo(u, d.settings.dailyLimit);
+  if (quota.remainingToday <= 0) {
+    return json(res, 429, { ok: false, error: { type: 'Limit', message: `今天的 ${quota.effectiveLimit} 次额度已用完，明天再来或联系站长增加额度吧` } });
   }
 
   const width = Math.min(1440, Math.max(256, Number(body.width) || 1024));
@@ -99,18 +177,30 @@ async function handleTryon(req, res) {
   const blobIn = new Blob([Buffer.from(img.b64, 'base64')], { type: img.mime });
   const prompt = String(body.prompt);
 
+  // 记录学习行为
+  store.recordUserBehavior(clientId, [{
+    t: Date.now(),
+    type: 'tryon_generate',
+    cat: body.cat || null,
+    inspId: body.inspId || null,
+    tags: Array.isArray(body.tags) ? body.tags : []
+  }]);
+
   /* 结果缓存：感知哈希 + prompt 去重，命中直接返回，跳过 API 调用 */
   const phashHex = typeof body.phash === 'string' && /^[0-9a-f]{16}$/i.test(body.phash) ? body.phash.toLowerCase() : null;
   if (phashHex) {
     const hit = cache.lookup(phashHex, prompt);
     if (hit.hit) {
       store.recordEvent({ clientId, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, err: hit.exact ? 'cache-hit' : `cache-fuzzy(${hit.dist})` });
+      store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
       store.save();
+      const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
       return json(res, 200, {
         ok: true,
         image: `data:${hit.entry.mime || 'image/png'};base64,${hit.entry.image}`,
         provider: { id: hit.entry.provider || 'cache', label: hit.entry.provider || '缓存' },
         cached: true,
+        remainingToday: updatedQuota.remainingToday,
         ms: Date.now() - t0
       });
     }
@@ -131,10 +221,18 @@ async function handleTryon(req, res) {
     if (phashHex) {
       cache.store(phashHex, prompt, b64, mime, provider.id);
     }
-    store.touchUser(clientId, { count: 1 });
+    store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
     store.recordEvent({ clientId, provider: provider.id, ok: true, ms: Date.now() - t0 });
     store.save();
-    return json(res, 200, { ok: true, image: `data:${mime};base64,${b64}`, provider: { id: provider.id, label: provider.label }, cached: false, ms: Date.now() - t0 });
+    const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
+    return json(res, 200, {
+      ok: true,
+      image: `data:${mime};base64,${b64}`,
+      provider: { id: provider.id, label: provider.label },
+      cached: false,
+      remainingToday: updatedQuota.remainingToday,
+      ms: Date.now() - t0
+    });
   } catch (err) {
     const e = normalizeError(err);
     store.recordEvent({ clientId, provider: providerUsed, ok: false, ms: Date.now() - t0, err: e.message });
@@ -218,13 +316,106 @@ async function handleAdmin(req, res, url) {
     }
   }
 
-  /* 用户 */
-  if (req.method === 'GET' && op === 'users') return json(res, 200, { ok: true, users: store.listUsers(), dailyLimit: store.load().settings.dailyLimit });
+  /* 用户管理与单独设置 */
+  if (req.method === 'GET' && op === 'users') {
+    const d = store.load();
+    const recSettings = store.getRecommendationSettings();
+    const userList = store.listUsers().map(u => {
+      const events = u.behaviorEvents || [];
+      const persona = computeUserPersona(events, recSettings);
+      return {
+        ...u,
+        persona: {
+          name: persona.personaName,
+          badge: persona.personaBadge,
+          type: persona.personaType,
+          confidence: persona.confidence
+        }
+      };
+    });
+    return json(res, 200, {
+      ok: true,
+      users: userList,
+      globalDailyLimit: d.settings.dailyLimit
+    });
+  }
+
+  if (req.method === 'GET' && op === 'users/detail') {
+    const clientId = safeClientId(url.searchParams.get('clientId'));
+    if (!clientId) return json(res, 400, { ok: false, message: 'clientId 不合法' });
+    const d = store.load();
+    const u = d.users[clientId];
+    if (!u) return json(res, 404, { ok: false, message: '未找到该用户' });
+
+    const recSettings = store.getRecommendationSettings();
+    const events = u.behaviorEvents || [];
+    const persona = computeUserPersona(events, recSettings);
+    const quota = store.getUserQuotaInfo(u, d.settings.dailyLimit);
+
+    // 筛选与该用户相关的生成日志
+    const userEvents = (d.stats.events || []).filter(e => e.clientId === clientId).slice(0, 30);
+
+    return json(res, 200, {
+      ok: true,
+      user: {
+        id: clientId,
+        ...u,
+        ...quota
+      },
+      persona,
+      generationHistory: userEvents,
+      behaviorEvents: events.slice(0, 30),
+      globalDailyLimit: d.settings.dailyLimit
+    });
+  }
+
+  if (req.method === 'POST' && op === 'users/update') {
+    let body;
+    try { body = JSON.parse(await readBody(req, 16 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
+    const clientId = safeClientId(body.clientId);
+    if (!clientId) return json(res, 400, { ok: false, message: 'clientId 不合法' });
+
+    store.updateUserQuota(clientId, {
+      customDailyLimit: body.customDailyLimit,
+      bonusQuota: body.bonusQuota,
+      resetToday: !!body.resetToday,
+      note: body.note,
+      blocked: body.blocked
+    });
+    store.save();
+
+    const d = store.load();
+    const u = store.getUser(clientId);
+    const quota = store.getUserQuotaInfo(u, d.settings.dailyLimit);
+
+    return json(res, 200, {
+      ok: true,
+      message: '用户配置已更新',
+      user: {
+        id: clientId,
+        ...u,
+        ...quota
+      }
+    });
+  }
+
+  if (req.method === 'POST' && op === 'users/reset-today') {
+    let body;
+    try { body = JSON.parse(await readBody(req, 8 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
+    const clientId = safeClientId(body.clientId);
+    if (!clientId) return json(res, 400, { ok: false, message: 'clientId 不合法' });
+
+    store.updateUserQuota(clientId, { resetToday: true });
+    store.save();
+    return json(res, 200, { ok: true, message: '今日使用量已重置为 0' });
+  }
+
   if (req.method === 'POST' && op === 'users/block') {
     let body;
     try { body = JSON.parse(await readBody(req, 8 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
-    if (!safeClientId(body.clientId)) return json(res, 400, { ok: false, message: 'clientId 不合法' });
-    store.markUser(body.clientId, { blocked: !!body.blocked });
+    const clientId = safeClientId(body.clientId);
+    if (!clientId) return json(res, 400, { ok: false, message: 'clientId 不合法' });
+    store.markUser(clientId, { blocked: !!body.blocked });
     store.save();
     return json(res, 200, { ok: true, users: store.listUsers() });
   }
@@ -249,6 +440,113 @@ async function handleAdmin(req, res, url) {
     if (typeof body.announcement === 'string') d.settings.announcement = body.announcement.slice(0, 140);
     store.save();
     return json(res, 200, { ok: true, settings: d.settings });
+  }
+
+  /* 用户画像全景与画像详情 */
+  if (req.method === 'GET' && op === 'personas') {
+    const d = store.load();
+    const recSettings = store.getRecommendationSettings();
+    const aggregate = aggregateUserPersonas(d.users, recSettings);
+    const usersPersonaList = Object.entries(d.users).map(([clientId, u]) => {
+      const events = u.behaviorEvents || [];
+      const persona = computeUserPersona(events, recSettings);
+      return {
+        id: clientId,
+        first: u.first,
+        last: u.last,
+        total: u.total,
+        dayCount: u.dayCount,
+        blocked: !!u.blocked,
+        persona
+      };
+    }).sort((a, b) => (b.persona.stats.totalEvents || 0) - (a.persona.stats.totalEvents || 0));
+
+    return json(res, 200, {
+      ok: true,
+      aggregate,
+      users: usersPersonaList,
+      presets: REC_PRESETS,
+      currentSettings: recSettings
+    });
+  }
+
+  if (req.method === 'GET' && op === 'personas/detail') {
+    const clientId = safeClientId(url.searchParams.get('clientId'));
+    const d = store.load();
+    const u = clientId ? d.users[clientId] : null;
+    if (!u) return json(res, 404, { ok: false, message: '用户不存在' });
+
+    const recSettings = store.getRecommendationSettings();
+    const events = u.behaviorEvents || [];
+    const persona = computeUserPersona(events, recSettings);
+    const recommendations = recommendInspirations(persona, { limit: 12, customWeights: recSettings });
+
+    return json(res, 200, {
+      ok: true,
+      user: { id: clientId, ...u },
+      persona,
+      events: events.slice(0, 50),
+      recommendations
+    });
+  }
+
+  /* 推荐算法配置读取与修改 */
+  if (req.method === 'GET' && op === 'recommendation-settings') {
+    return json(res, 200, {
+      ok: true,
+      settings: store.getRecommendationSettings(),
+      presets: REC_PRESETS
+    });
+  }
+
+  if (req.method === 'POST' && op === 'recommendation-settings') {
+    let body;
+    try { body = JSON.parse(await readBody(req, 16 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
+    const patch = {};
+    if (body.preset && REC_PRESETS[body.preset]) patch.preset = body.preset;
+    if (body.personalWeight != null) patch.personalWeight = Math.min(1, Math.max(0, Number(body.personalWeight) || 0));
+    if (body.hotnessWeight != null) patch.hotnessWeight = Math.min(1, Math.max(0, Number(body.hotnessWeight) || 0));
+    if (body.freshnessWeight != null) patch.freshnessWeight = Math.min(1, Math.max(0, Number(body.freshnessWeight) || 0));
+    if (body.exploreWeight != null) patch.exploreWeight = Math.min(1, Math.max(0, Number(body.exploreWeight) || 0));
+    if (body.decayHalfLifeDays != null) patch.decayHalfLifeDays = Math.min(60, Math.max(1, Number(body.decayHalfLifeDays) || 7));
+    if (body.categoryBoost != null) patch.categoryBoost = Math.min(0.5, Math.max(0, Number(body.categoryBoost) || 0.15));
+
+    const updated = store.updateRecommendationSettings(patch);
+    store.save();
+    return json(res, 200, { ok: true, settings: updated });
+  }
+
+  /* 推荐算法在线实时模拟对比 */
+  if (req.method === 'POST' && op === 'simulate-recommendation') {
+    let body;
+    try { body = JSON.parse(await readBody(req, 32 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
+    const clientId = safeClientId(body.clientId);
+    const d = store.load();
+    const u = clientId ? d.users[clientId] : null;
+    const events = (u && u.behaviorEvents) || (body.customEvents || []);
+
+    const weights = {
+      preset: body.preset || 'balanced',
+      personalWeight: Number(body.personalWeight) ?? 0.45,
+      hotnessWeight: Number(body.hotnessWeight) ?? 0.20,
+      freshnessWeight: Number(body.freshnessWeight) ?? 0.15,
+      exploreWeight: Number(body.exploreWeight) ?? 0.20,
+      decayHalfLifeDays: Number(body.decayHalfLifeDays) ?? 7,
+      categoryBoost: Number(body.categoryBoost) ?? 0.15
+    };
+
+    const persona = computeUserPersona(events, weights);
+    const results = recommendInspirations(persona, {
+      cat: body.cat || 'all',
+      limit: Number(body.limit) || 12,
+      customWeights: weights
+    });
+
+    return json(res, 200, {
+      ok: true,
+      persona,
+      results
+    });
   }
 
   /* 改口令 */
@@ -304,6 +602,8 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/api/config') return await handleConfig(req, res, url);
     if (url.pathname === '/api/tryon') return await handleTryon(req, res);
+    if (url.pathname === '/api/user/behavior') return await handleUserBehavior(req, res);
+    if (url.pathname === '/api/recommendations') return await handleRecommendations(req, res, url);
     if (url.pathname === '/api/admin' || url.pathname.startsWith('/api/admin/')) return await handleAdmin(req, res, url);
     if (url.pathname.startsWith('/api/')) return json(res, 404, { ok: false, message: '未知接口' });
     return serveStatic(req, res, url.pathname);
@@ -315,7 +615,7 @@ const server = http.createServer(async (req, res) => {
 
 const boot = store.initAdmin();
 await initNet();
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log(`  莓好灵感屋 已启动 → http://localhost:${PORT}`);
   console.log(`  用户端     → ${'http://localhost:' + PORT + '/'}`);

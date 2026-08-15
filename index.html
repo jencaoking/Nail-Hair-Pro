@@ -17,13 +17,23 @@
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/components.css">
   <link rel="stylesheet" href="./css/pages.css">
+  <script>
+    (function() {
+      try {
+        var mode = localStorage.getItem('theme_mode') || 'auto';
+        var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.setAttribute('data-theme-setting', mode);
+      } catch(e){}
+    })();
+  </script>
 </head>
 <body>
 
   <header class="site-header">
     <div class="container">
       <a class="brand" href="#/home" aria-label="莓好灵感屋 首页">
-        <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><rect x="26" y="4" width="12" height="10" rx="3" fill="#F27E9C" stroke="#5C4A42" stroke-width="3"/><path d="M20 18h24l-3 8v26a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8V26z" fill="#FF9BB3" stroke="#5C4A42" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="38" r="7" fill="#FFF8F2" stroke="#5C4A42" stroke-width="3"/><path d="M28 35l8 6M36 35l-8 6" stroke="#F27E9C" stroke-width="3" stroke-linecap="round"/></svg>
+        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect x="26" y="4" width="12" height="10" rx="3" fill="#F27E9C" stroke="#5C4A42" stroke-width="3"/><path d="M20 18h24l-3 8v26a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8V26z" fill="#FF9BB3" stroke="#5C4A42" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="38" r="7" fill="#FFF8F2" stroke="#5C4A42" stroke-width="3"/><path d="M28 35l8 6M36 35l-8 6" stroke="#F27E9C" stroke-width="3" stroke-linecap="round"/></svg>
         <span>
           <span class="name">莓好灵感屋</span>
           <span class="sub">美甲 · 发色 · 发型 AI 试戴</span>
@@ -35,9 +45,14 @@
         <a href="#/hair" data-nav="hair">美发试戴</a>
         <a href="#/mine" data-nav="mine">我的</a>
       </nav>
-      <button class="provider-badge" id="provider-badge" title="AI 引擎状态，点击去设置">
-        <span class="dot" aria-hidden="true"></span><span id="provider-badge-text">自动引擎</span>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="theme-toggle-btn" id="header-theme-toggle" aria-label="切换明暗主题模式" title="切换明暗主题">
+          <span class="theme-icon" aria-hidden="true">🌓</span>
+        </button>
+        <button class="provider-badge" id="provider-badge" title="AI 引擎状态，点击去设置">
+          <span class="dot" aria-hidden="true"></span><span id="provider-badge-text">自动引擎</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -46,27 +61,65 @@
     <!-- ① 首页 -->
     <section id="view-home" data-view="home" hidden>
       <div class="hero">
+        <div class="hero-badge-row">
+          <span class="burst-badge burst-pow">POW!</span>
+          <span class="chip">✨ 52款原创款式</span>
+          <span class="chip lav">⚡ 秒级AI智能试戴</span>
+          <span class="chip mint">🔒 纯净免登录体验</span>
+          <span class="burst-badge burst-bam">BAM!</span>
+        </div>
         <h1>今天想变<span class="hl">美</span>一点点？</h1>
-        <p class="sub">拍张照片，AI 帮你免费试戴美甲、发色和发型</p>
+        <div style="display:flex;justify-content:center;margin-top:12px">
+          <div class="speech-bubble tail-bottom" style="font-size:0.95rem;max-width:480px;text-align:center">
+            💬 拍张照片，AI 帮你秒级生成美甲、发色与发型实景试戴效果！
+          </div>
+        </div>
       </div>
+
       <div class="entry-grid">
-        <a class="entry-card nail" href="#/nails">
-          <span class="chip">美甲</span>
+        <a class="entry-card nail manga-panel-frame" href="#/nails">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="chip">💅 美甲试戴</span>
+            <span class="burst-badge burst-zap" style="font-size:0.72rem;padding:2px 6px">ZAP!</span>
+          </div>
           <h3>试美甲</h3>
           <p>拍一张手部照片，猫眼、法式、碎钻即刻上身</p>
-          <span class="btn btn-primary btn-sm go">去试戴</span>
-          <svg class="ic" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><g stroke="#5C4A42" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M42 96c-8-14-6-30 2-44 4-7 12-12 16-6 3 5-2 9-5 15-4 8-3 22 3 35" fill="#FF9BB3"/><path d="M57 61c2-8 9-12 14-8 6 5 3 13-3 15-7 2-11 9-11 18 0 6 2 10 5 14" fill="#FFD9E3"/><circle cx="52" cy="82" r="7" fill="#FF9BB3"/><circle cx="70" cy="88" r="7" fill="#C9B8F0"/><circle cx="88" cy="94" r="7" fill="#FFD66B"/></g></svg>
+          <span class="btn btn-primary btn-sm go">去试戴 →</span>
+          <svg class="ic" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><g stroke="#1a1a1a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M42 96c-8-14-6-30 2-44 4-7 12-12 16-6 3 5-2 9-5 15-4 8-3 22 3 35" fill="#ef4444"/><path d="M57 61c2-8 9-12 14-8 6 5 3 13-3 15-7 2-11 9-11 18 0 6 2 10 5 14" fill="#fee2e2"/><circle cx="52" cy="82" r="7" fill="#ef4444"/><circle cx="70" cy="88" r="7" fill="#3b82f6"/><circle cx="88" cy="94" r="7" fill="#facc15"/></g></svg>
         </a>
-        <a class="entry-card hair" href="#/hair">
-          <span class="chip lav">美发</span>
+        <a class="entry-card hair manga-panel-frame" href="#/hair">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="chip lav">💇 美发试戴</span>
+            <span class="burst-badge burst-wow" style="font-size:0.72rem;padding:2px 6px">WOW!</span>
+          </div>
           <h3>试发色 / 发型</h3>
           <p>拍一张头部照片，蜜桃棕、雾霾蓝、锁骨发想换就换</p>
-          <span class="btn btn-lav btn-sm go">去试戴</span>
-          <svg class="ic" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><g stroke="#5C4A42" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="60" cy="52" r="20" fill="#FFE3EA"/><path d="M38 48c-4-16 6-30 22-30s26 12 24 28c-2 12-8 18-6 26 1 6 6 10 12 10-8 8-20 10-30 6" fill="#C9B8F0"/><path d="M60 30c10 4 16 14 16 26" fill="none"/><path d="M46 34c-2 8 0 16 4 22" fill="none"/></g></svg>
+          <span class="btn btn-lav btn-sm go">去试戴 →</span>
+          <svg class="ic" width="120" height="120" viewBox="0 0 120 120" aria-hidden="true"><g stroke="#1a1a1a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="60" cy="52" r="20" fill="#fee2e2"/><path d="M38 48c-4-16 6-30 22-30s26 12 24 28c-2 12-8 18-6 26 1 6 6 10 12 10-8 8-20 10-30 6" fill="#3b82f6"/><path d="M60 30c10 4 16 14 16 26" fill="none"/><path d="M46 34c-2 8 0 16 4 22" fill="none"/></g></svg>
         </a>
       </div>
+
+      <!-- 个性化画像与智能推荐专区 -->
+      <div class="home-persona-banner manga-panel-frame" id="home-persona-banner" hidden>
+        <div class="persona-header">
+          <div class="persona-info">
+            <span class="persona-tag" id="home-persona-badge">🌱 灵感初探</span>
+            <strong id="home-persona-title">为你量身定制的专属灵感</strong>
+          </div>
+          <span class="persona-conf" id="home-persona-conf">AI 学习中</span>
+        </div>
+        <p class="persona-desc" id="home-persona-desc">基于你的浏览与试戴偏好，推荐算法已为你实时计算最契合的灵感款式</p>
+        <div class="persona-recs-scroll" id="home-persona-recs"></div>
+      </div>
+
       <div class="home-section">
-        <h3>今日推荐灵感</h3>
+        <div class="home-section-head">
+          <h3>今日推荐灵感</h3>
+          <div class="search-wrap" style="position:relative;width:100%;max-width:280px">
+            <input type="text" id="home-search-input" placeholder="🔍 搜索猫眼、法式、短发…" class="comic-input-box" style="width:100%;min-height:42px;padding:8px 14px;border:3px solid var(--border-ink);border-radius:var(--r-s);background:var(--surface);font-size:0.88rem;font-weight:700;box-shadow:2px 2px 0px 0px rgba(26,26,26,1);outline:none">
+          </div>
+        </div>
+        <div class="home-filter-scroll" id="home-filter-tags"></div>
         <div class="insp-grid" id="home-picks"></div>
       </div>
     </section>
@@ -134,6 +187,11 @@
       我的
     </a>
   </nav>
+
+  <!-- 悬浮回到顶部按钮 -->
+  <button id="btn-back-to-top" class="back-to-top" aria-label="回到顶部" title="回到顶部">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+  </button>
 
   <div id="toast-root" aria-live="polite"></div>
   <div id="modal-root"></div>

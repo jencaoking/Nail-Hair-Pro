@@ -1,0 +1,10 @@
+{
+  "name": "Remix Nail-Hair-Pro",
+  "description": "莓好灵感屋 - AI 美甲与发色发型试戴系统，集成用户独立管理（IP/设备记录/额度调整）、全站漫画风全局暗黑模式与多因子推荐算法工作台。",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

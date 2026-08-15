@@ -21,7 +21,9 @@ export function fetchConfig({ force = false } = {}) {
 export function badgeText(config) {
   if (!config) return '服务未连接';
   if (!config.engines || !config.engines.length) return '引擎配置中';
-  return '自动 · ' + config.engines[0].label;
+  const rawLabel = config.engines[0].label || 'AI 引擎';
+  const cleanName = rawLabel.replace(/[\(（][^)]*?[\)）]/g, '').trim();
+  return '自动 · ' + (cleanName || rawLabel);
 }
 
 /* 生成成功后刷新额度缓存（今日 +1） */

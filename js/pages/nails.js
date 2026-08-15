@@ -1,10 +1,12 @@
 /* 通用试戴流程工厂（美甲页默认实例；hair.js 复用）
- * 状态机：empty → camera / photo → generating → result / error */
+ * 状态机：empty → camera / photo → generating → result / error
+ */
 import { cameraSupported, createCamera, explainCameraError } from '../capture/camera.js';
 import { toJpegBlob } from '../capture/preprocess.js';
 import { isEnhance } from '../store/settings.js';
 import { renderInspCard, byId, byCat } from '../data/inspirations.js';
 import { buildPrompt, genSize } from '../data/prompts.js';
+import { getSamplePhoto } from '../data/samples.js';
 import { tryOn } from '../ai/api.js';
 import { normalizeError, copyFor } from '../ai/errors.js';
 import { bumpUsage } from '../ai/registry.js';
@@ -12,9 +14,16 @@ import { renderCompare } from '../ui/compare.js';
 import { openModal } from '../ui/modal.js';
 import { toast } from '../ui/toast.js';
 import { addHistory } from '../store/db.js';
+import { trackBehavior } from '../store/userLearning.js';
 import { go } from '../router.js';
 
-const HEART_SVG = `<svg width="44" height="44" viewBox="0 0 24 24" fill="#FF9BB3" stroke="#5C4A42" stroke-width="1.6" aria-hidden="true"><path d="M12 20.5C7 16.5 3.5 13.4 3.5 9.6 3.5 7 5.5 5 8 5c1.6 0 3 .8 4 2.1C13 5.8 14.4 5 16 5c2.5 0 4.5 2 4.5 4.6 0 3.8-3.5 6.9-8.5 10.9z"/></svg>`;
+const HEART_SVG = `<svg width="48" height="48" viewBox="0 0 24 24" fill="#F43F6E" stroke="#FFFFFF" stroke-width="1.8" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+
+const PROMPT_SUGGESTIONS = {
+  nail: ['✨ 爆闪碎钻', '🎀 法式白边', '🍑 蜜桃渐变', '🌙 极光猫眼', '🍓 草莓小手绘', '🍫 焦糖奶茶'],
+  hairColor: ['☕ 奶茶灰棕', '🍷 浓郁波尔多红', '🌊 蓝灰挑染', '🌸 樱花粉', '🍂 枫叶红铜', '🍯 蜜糖金'],
+  hairStyle: ['💇 慵懒法式卷', '✨ 气质锁骨发', '🎀 减龄八字刘海', '🌊 温柔大波浪', '⚡ 利落短BOB', '🐎 元气高马尾']
+};
 
 export function createTryOnPage(opts) {
   const { cat, aspect, phrases, emptyTip, customPlaceholder, getCat } = opts;
@@ -29,40 +38,82 @@ export function createTryOnPage(opts) {
   let camera = null;
   let abortCtrl = null;
   let phraseTimer = null;
-  let lastGenArgs = null;
+  let lastResultBlob = null;
+  let lastProvider = null;
+
+  const currentCategory = () => (getCat ? getCat() : cat);
 
   /* ---------- 源面板 DOM ---------- */
   sourceEl.innerHTML = `
-    <div class="photo-zone">
+    <div class="photo-zone" id="photo-zone-${cat}">
       <div class="zone-empty">
-        <div class="art"><svg width="72" height="72" viewBox="0 0 80 80" fill="none" stroke="#9A857B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="26" width="44" height="44" rx="8" fill="#FFE3EA"/><path d="M52 34l18-12" /><circle cx="72" cy="20" r="5" fill="#FF9BB3"/><path d="M22 44h16M22 54h10"/></svg></div>
+        <div class="art">
+          <svg width="68" height="68" viewBox="0 0 80 80" fill="none" stroke="#A89B9F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="10" y="24" width="46" height="46" rx="12" fill="#FFE4EC" stroke="#F43F6E"/>
+            <path d="M56 34l14-10" stroke="#F43F6E"/>
+            <circle cx="70" cy="24" r="4" fill="#F43F6E"/>
+            <path d="M24 44h18M24 54h12" stroke="#F43F6E"/>
+          </svg>
+        </div>
         <p class="tip">${emptyTip}</p>
         <div class="btns">
-          <button class="btn btn-primary" data-act="camera">拍照</button>
-          <button class="btn btn-ghost" data-act="upload">从相册选</button>
+          <button class="btn btn-primary" data-act="camera">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            拍照试戴
+          </button>
+          <button class="btn btn-ghost" data-act="upload">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            相册上传
+          </button>
+        </div>
+        <div class="sample-bar">
+          <span class="sample-label">没有照片？</span>
+          <button type="button" class="sample-btn" data-act="sample-photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+            试用模特示例照
+          </button>
         </div>
       </div>
       <video hidden playsinline muted></video>
       <img class="captured" hidden alt="已选照片">
-      <span class="chip cam-tip" hidden>把${cat === 'nail' ? '手' : '脸'}放进取景框</span>
-      <button class="btn btn-sm btn-ghost retake" hidden data-act="retake">重拍</button>
+      <span class="chip cam-tip" hidden>✨ 把${cat === 'nail' ? '手指' : '脸部'}置于画面中心</span>
+      <button class="btn btn-sm btn-ghost retake" hidden data-act="retake">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        重新选择
+      </button>
       <div class="cam-ctrl" hidden>
-        <button class="btn btn-sm btn-ghost" data-act="flip" aria-label="翻转摄像头">翻转</button>
+        <button class="btn btn-sm btn-ghost" data-act="flip" aria-label="翻转摄像头">🔄 翻转</button>
         <button class="shutter" data-act="shutter" aria-label="拍照"></button>
         <button class="btn btn-sm btn-ghost" data-act="cam-cancel" aria-label="关闭相机">关闭</button>
       </div>
     </div>
+
+    <!-- 选中灵感胶囊 -->
+    <div class="selected-capsule" hidden id="capsule-${cat}">
+      <div class="cap-left">
+        <span class="chip" id="capsule-tag-${cat}">已选款式</span>
+        <span class="cap-title" id="capsule-title-${cat}">-</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" data-act="clear-insp" style="padding:4px 10px;min-height:30px;font-size:0.78rem">取消所选</button>
+    </div>
+
     <div class="custom-row">
       <label class="sr-only" for="custom-${cat}">自定义描述</label>
       <input id="custom-${cat}" type="text" maxlength="120" placeholder="${customPlaceholder}">
+      <div class="prompt-chips" id="chips-${cat}"></div>
     </div>
+
     <div class="gen-row">
-      <button class="btn btn-primary btn-block" data-act="generate">生成试戴</button>
+      <button class="btn btn-primary btn-block btn-lg" data-act="generate">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        <span>生成试戴效果</span>
+      </button>
       <button class="btn btn-ghost" data-act="cancel" hidden>取消</button>
     </div>
+
     <div class="engine-progress" hidden>
       <div class="track"><div class="bar"></div></div>
-      <p class="cap"></p>
+      <p class="cap">AI 施法中 · 正在进行特征对齐与色彩融合…</p>
     </div>
     <input type="file" accept="image/*" class="sr-only" data-act="file">
   `;
@@ -82,14 +133,63 @@ export function createTryOnPage(opts) {
   const engineBar = engineBox.querySelector('.bar');
   const engineCap = engineBox.querySelector('.cap');
   const customInput = q('input[type="text"]');
+  const capsule = q(`#capsule-${cat}`);
+  const capsuleTitle = q(`#capsule-title-${cat}`);
+  const chipsBox = q(`#chips-${cat}`);
 
   camera = createCamera(video);
 
-  /* ---------- 显隐切换：用 class 与 hidden 双保险，兼容部分 WebView/Safari 对 hidden 属性的不一致支持 */
   const show = el => { if (!el) return; el.hidden = false; el.classList.remove('is-hidden'); };
   const hide = el => { if (!el) return; el.hidden = true;  el.classList.add('is-hidden'); };
 
-  /* ---------- 源面板交互 ---------- */
+  /* ---------- 渲染快捷提示词 ---------- */
+  function renderPromptChips() {
+    const list = PROMPT_SUGGESTIONS[currentCategory()] || PROMPT_SUGGESTIONS[cat] || [];
+    chipsBox.innerHTML = list.map(text => `<span class="prompt-chip" data-chip="${text}">${text}</span>`).join('');
+  }
+  renderPromptChips();
+
+  chipsBox.addEventListener('click', e => {
+    const chip = e.target.closest('[data-chip]');
+    if (!chip) return;
+    const val = chip.dataset.chip.replace(/^[^\s]+\s*/, ''); // 去除前面的 emoji
+    if (customInput.value.includes(val)) return;
+    customInput.value = (customInput.value.trim() ? customInput.value.trim() + '，' : '') + val;
+    toast(`已添加标签：${val}`);
+    customInput.focus();
+  });
+
+  /* ---------- 拖拽与粘贴支持 ---------- */
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('dragover');
+  });
+  zone.addEventListener('dragleave', () => {
+    zone.classList.remove('dragover');
+  });
+  zone.addEventListener('drop', async e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      await handleFile(file);
+    }
+  });
+
+  window.addEventListener('paste', async e => {
+    if (sourceEl.offsetParent === null) return; // 页面未激活时不处理
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf('image') === 0) {
+        const blob = item.getAsFile();
+        await handleFile(blob);
+        toast('已从剪贴板读取照片');
+        break;
+      }
+    }
+  });
+
+  /* ---------- 源面板事件委托 ---------- */
   sourceEl.addEventListener('click', async e => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (!act) return;
@@ -102,6 +202,8 @@ export function createTryOnPage(opts) {
       if (act === 'shutter') await takeShot();
       if (act === 'generate') await generate();
       if (act === 'cancel') abortCtrl && abortCtrl.abort();
+      if (act === 'clear-insp') clearSelectedInsp();
+      if (act === 'sample-photo') await loadSamplePhoto();
     } catch (err) {
       toast(explainCameraError(err), 'err');
     }
@@ -110,25 +212,47 @@ export function createTryOnPage(opts) {
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     fileInput.value = '';
-    if (!file) return;
+    if (file) await handleFile(file);
+  });
+
+  async function handleFile(file) {
     try {
+      toast('正在优化照片…');
       const { blob, phash } = await toJpegBlob(file, {
         enhance: isEnhance(),
         subject: cat === 'nail' ? 'skin' : 'none'
       });
       setPhoto(blob, phash);
-      toast('照片准备好啦，选个款式试试');
+      toast('照片准备好啦，点击下方灵感即可一键试戴', 'ok');
     } catch (e) {
-      toast('这张图片读取失败了，换一张试试', 'err');
+      toast('这张图片读取失败了，请换一张试试', 'err');
     }
-  });
+  }
+
+  async function loadSamplePhoto() {
+    try {
+      toast('正在加载模特示例照…');
+      const sampleBlob = await getSamplePhoto(cat === 'nail' ? 'nail' : 'face');
+      const { blob, phash } = await toJpegBlob(sampleBlob, {
+        enhance: isEnhance(),
+        subject: cat === 'nail' ? 'skin' : 'none'
+      });
+      setPhoto(blob, phash);
+      toast('示例照片已加载，选个灵感试试吧！', 'ok');
+    } catch (e) {
+      toast('示例照片加载失败', 'err');
+    }
+  }
 
   async function startCamera() {
     if (!cameraSupported()) {
       openModal({
         title: '当前环境不支持相机',
-        body: '<p>相机需要 HTTPS 网络环境（本地 localhost 也可以）。不着急，从相册选一张照片同样可以试戴。</p>',
-        actions: [{ key: 'upload', label: '从相册选', cls: 'btn-primary', onClick: () => { fileInput.click(); } }]
+        body: '<p>相机调用需要安全环境（HTTPS 或 Localhost）。您可以直接从相册上传或点击试用模特照片。</p>',
+        actions: [
+          { key: 'upload', label: '从相册选', cls: 'btn-primary', onClick: () => { fileInput.click(); } },
+          { key: 'sample', label: '试用示例照', cls: 'btn-lav', onClick: () => { loadSamplePhoto(); } }
+        ]
       });
       return;
     }
@@ -146,7 +270,7 @@ export function createTryOnPage(opts) {
         title: '相机没能打开',
         body: `<p>${explainCameraError(err)}</p>`,
         actions: [
-          { key: 'upload', label: '改用上传', cls: 'btn-primary', onClick: () => { fileInput.click(); } },
+          { key: 'upload', label: '从相册上传', cls: 'btn-primary', onClick: () => { fileInput.click(); } },
           { key: 'close', label: '知道了' }
         ]
       });
@@ -157,7 +281,6 @@ export function createTryOnPage(opts) {
     let blob = await camera.capture();
     let phash = null;
     stopCameraUI();
-    // 拍照路径同样经过增强预处理（主体裁剪/光照/自适应质量）
     try {
       const r = await toJpegBlob(blob, {
         enhance: isEnhance(),
@@ -165,9 +288,9 @@ export function createTryOnPage(opts) {
       });
       blob = r.blob;
       phash = r.phash;
-    } catch (e) { /* 增强失败则退回原始照片 */ }
+    } catch (e) { }
     setPhoto(blob, phash);
-    toast('拍到啦');
+    toast('拍到啦，选个款式马上试戴', 'ok');
   }
 
   function stopCameraUI() {
@@ -209,53 +332,89 @@ export function createTryOnPage(opts) {
     updateGenerateLabel();
   }
 
-  function updateGenerateLabel() {
-    const insp = selectedInspId ? byId(selectedInspId) : null;
-    if (photoBlob && insp) generateBtn.textContent = `试戴「${insp.title}」`;
-    else generateBtn.textContent = '生成试戴';
+  function selectInsp(inspId) {
+    selectedInspId = inspId;
+    const insp = byId(inspId);
+    if (insp) {
+      capsuleTitle.textContent = insp.title;
+      show(capsule);
+      trackBehavior({
+        type: 'select_insp',
+        inspId: insp.id,
+        cat: insp.cat,
+        tags: insp.tags
+      });
+    } else {
+      hide(capsule);
+    }
+    if (stripEl) {
+      stripEl.querySelectorAll('.insp-card').forEach(c => {
+        const isMatch = c.dataset.inspId === inspId;
+        c.classList.toggle('selected', isMatch);
+        c.setAttribute('aria-pressed', isMatch ? 'true' : 'false');
+      });
+    }
+    updateGenerateLabel();
   }
 
-  /* ---------- 灵感卡 ---------- */
+  function clearSelectedInsp() {
+    selectedInspId = null;
+    hide(capsule);
+    if (stripEl) {
+      stripEl.querySelectorAll('.insp-card').forEach(c => {
+        c.classList.remove('selected');
+        c.setAttribute('aria-pressed', 'false');
+      });
+    }
+    updateGenerateLabel();
+  }
+
+  function updateGenerateLabel() {
+    const insp = selectedInspId ? byId(selectedInspId) : null;
+    const labelSpan = generateBtn.querySelector('span');
+    if (labelSpan) {
+      if (insp) labelSpan.textContent = `生成「${insp.title}」效果`;
+      else if (customInput.value.trim()) labelSpan.textContent = '生成自定义效果';
+      else labelSpan.textContent = '生成试戴效果';
+    }
+  }
+
+  customInput.addEventListener('input', updateGenerateLabel);
+
+  /* ---------- 灵感卡生成与交互 ---------- */
   function makeCard(item) {
     const card = renderInspCard(item, { selected: item.id === selectedInspId });
     card.addEventListener('click', () => {
-      if (selectedInspId === item.id) return;
-      selectedInspId = item.id;
-      stripEl.querySelectorAll('.insp-card').forEach(c => {
-        c.classList.toggle('selected', c.dataset.inspId === item.id);
-        c.setAttribute('aria-pressed', c.dataset.inspId === item.id ? 'true' : 'false');
-      });
-      updateGenerateLabel();
+      selectInsp(item.id);
       if (!photoBlob) {
-        toast('款式已选好，先拍张照片或上传一张');
+        toast(`已选择「${item.title}」，请先拍照或上传照片`);
         return;
       }
-      generate(); /* 已拍照：点击卡片直接生成 */
+      generate();
     });
     return card;
   }
 
-  /* ---------- 生成 ---------- */
+  /* ---------- AI 生成核心 ---------- */
   async function generate() {
     if (abortCtrl) return;
     if (!photoBlob) {
       openModal({
-        title: '还没有照片哦',
-        body: '<p>先拍一张照片或从相册选一张，AI 才能帮你试戴～</p>',
+        title: '请先提供照片',
+        body: '<p>拍一张手部或头部照片，或者一键加载示例模特照片，AI 就能为您施法试戴～</p>',
         actions: [
-          { key: 'camera', label: '拍照', cls: 'btn-primary', onClick: () => { startCamera(); } },
-          { key: 'upload', label: '从相册选', onClick: () => { fileInput.click(); } }
+          { key: 'sample', label: '使用示例照', cls: 'btn-lav', onClick: () => { loadSamplePhoto(); } },
+          { key: 'upload', label: '从相册上传', cls: 'btn-primary', onClick: () => { fileInput.click(); } }
         ]
       });
       return;
     }
     if (!selectedInspId && !customInput.value.trim()) {
-      toast('先在下面选一个灵感款式，或填写自定义描述', 'err');
+      toast('请在下方挑选一个灵感款式，或填写自定义描述', 'err');
       return;
     }
 
-    lastGenArgs = { inspId: selectedInspId, custom: customInput.value };
-    const catKey = getCat ? getCat() : cat;
+    const catKey = currentCategory();
     const prompt = buildPrompt(catKey, selectedInspId, customInput.value);
     const { width, height } = genSize(aspect);
 
@@ -264,11 +423,14 @@ export function createTryOnPage(opts) {
     show(cancelBtn);
     show(engineBox);
     renderLoading();
+
     let phraseIdx = 0;
     phraseTimer = setInterval(() => {
       const cap = resultEl.querySelector('.heart-spin .txt');
       if (cap) cap.textContent = phrases[++phraseIdx % phrases.length];
-    }, 2600);
+      const prog = Math.min(92, 25 + phraseIdx * 15);
+      engineBar.style.width = prog + '%';
+    }, 2400);
 
     try {
       const { blob, provider } = await tryOn({
@@ -278,23 +440,34 @@ export function createTryOnPage(opts) {
         height,
         phash: photoPhash,
         signal: abortCtrl.signal,
-        onEngine: ({ index, total, provider: p }) => {
-          engineBar.style.width = '62%';
-          engineCap.textContent = `AI 施法中 · ${p.label}`;
+        onEngine: ({ provider: p }) => {
+          engineBar.style.width = '75%';
+          engineCap.textContent = `AI 渲染中 · 服务商 ${p.label}`;
         }
       });
-      renderResult(blob, provider, catKey);
+
+      lastResultBlob = blob;
+      lastProvider = provider;
+      renderResult(blob, provider);
+
       const insp = selectedInspId ? byId(selectedInspId) : null;
+      trackBehavior({
+        type: 'tryon_generate',
+        cat: catKey,
+        inspId: selectedInspId,
+        tags: insp ? insp.tags : []
+      });
+
       await addHistory({
         cat: catKey,
-        title: insp ? insp.title : (customInput.value.trim().slice(0, 18) || '自定义'),
+        title: insp ? insp.title : (customInput.value.trim().slice(0, 18) || '自定义款式'),
         beforeBlob: photoBlob,
         afterBlob: blob,
         provider: provider.label,
         createdAt: Date.now()
       });
       bumpUsage();
-      toast('试戴完成，拖动中间的小圆点左右对比', 'ok');
+      toast('试戴完成！您可以拖动滑块对比前后效果', 'ok');
     } catch (err) {
       const e = normalizeError(err);
       if (e.type === 'UserCancel') {
@@ -309,23 +482,26 @@ export function createTryOnPage(opts) {
       generateBtn.disabled = false;
       hide(cancelBtn);
       hide(engineBox);
-      engineBar.style.width = '20%';
+      engineBar.style.width = '25%';
     }
   }
 
-  /* ---------- 结果面板状态 ---------- */
+  /* ---------- 结果状态渲染 ---------- */
   function renderIdle() {
     resultEl.innerHTML = `
       <div class="result-state">
         ${HEART_SVG}
-        <p class="cap">${emptyTip}<br>生成后在这里对比效果</p>
+        <p class="cap">拍照或选择灵感款式后<br>在此处实时预览 AI 试戴效果与高清对比</p>
       </div>`;
   }
 
   function renderLoading() {
     resultEl.innerHTML = `
       <div class="result-state">
-        <div class="heart-spin">${HEART_SVG}<p class="txt">${phrases[0]}</p></div>
+        <div class="heart-spin">
+          ${HEART_SVG}
+          <p class="txt">${phrases[0]}</p>
+        </div>
       </div>`;
   }
 
@@ -333,12 +509,12 @@ export function createTryOnPage(opts) {
     const copy = copyFor(e);
     resultEl.innerHTML = `
       <div class="result-state error-card">
-        <div class="emoji-face">${copy.face}</div>
+        <div class="emoji-face">${copy.face || '🪄'}</div>
         <p class="msg">${copy.msg}</p>
         <p class="sub">${copy.sub}</p>
-        <div class="result-actions" style="justify-content:center">
-          <button class="btn btn-primary btn-sm" data-ract="retry">再试一次</button>
-          <button class="btn btn-ghost btn-sm" data-ract="quota">查看额度</button>
+        <div class="result-actions">
+          <button class="btn btn-primary btn-sm" data-ract="retry">🔄 重新生成</button>
+          <button class="btn btn-ghost btn-sm" data-ract="quota">查看今日额度</button>
         </div>
       </div>`;
   }
@@ -350,22 +526,42 @@ export function createTryOnPage(opts) {
       <div class="result-figure">
         <div class="cmp-slot"></div>
         <div class="result-actions">
-          <a class="btn btn-primary btn-sm" download="tryon-${Date.now()}.jpg" href="${afterUrl}">保存图片</a>
-          <button class="btn btn-lav btn-sm" data-ract="again">再试一次</button>
-          <button class="btn btn-ghost btn-sm" data-ract="newphoto">换张照片</button>
+          <a class="btn btn-primary btn-sm" download="tryon-${Date.now()}.jpg" href="${afterUrl}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            保存高清效果图
+          </a>
+          <button class="btn btn-lav btn-sm" data-ract="again">🔄 换个款式</button>
+          <button class="btn btn-ghost btn-sm" data-ract="newphoto">📸 换张照片</button>
         </div>
-        <p class="result-meta">由 ${provider.label} 生成${insp ? ' · ' + insp.title : ''} · 仅供参考</p>
+        <p class="result-meta">由 ${provider.label} 渲染${insp ? ' · 款式「' + insp.title + '」' : ''} · 仅供参考</p>
       </div>`;
+
     const slot = resultEl.querySelector('.cmp-slot');
     if (slot) {
-      renderCompare(slot, photoUrl, afterUrl);
+      renderCompare(slot, photoUrl, afterUrl, 'slider');
       slot.style.aspectRatio = aspect === 'portrait' ? '3 / 4' : '4 / 3';
     }
   }
 
   resultEl.addEventListener('click', e => {
+    const downloadLink = e.target.closest('a[download]');
+    if (downloadLink) {
+      const insp = selectedInspId ? byId(selectedInspId) : null;
+      trackBehavior({
+        type: 'tryon_save',
+        cat: currentCategory(),
+        inspId: selectedInspId,
+        tags: insp ? insp.tags : []
+      });
+    }
     const ract = e.target.closest('[data-ract]')?.dataset.ract;
-    if (ract === 'retry' || ract === 'again') generate();
+    if (ract === 'retry' || ract === 'again') {
+      if (ract === 'again') {
+        toast('请在下方挑选新的款式，照片将自动保留');
+      } else {
+        generate();
+      }
+    }
     if (ract === 'quota') go('mine');
     if (ract === 'newphoto') { resetPhoto(); renderIdle(); }
   });
@@ -374,8 +570,15 @@ export function createTryOnPage(opts) {
 
   return {
     makeCard,
-    onEnter() { updateGenerateLabel(); },
-    onLeave() { stopCameraUI(); }
+    selectInsp,
+    renderPromptChips,
+    onEnter() {
+      updateGenerateLabel();
+      renderPromptChips();
+    },
+    onLeave() {
+      stopCameraUI();
+    }
   };
 }
 
@@ -386,9 +589,9 @@ const page = createTryOnPage({
   resultEl: '#nails-result',
   stripEl: '#nails-strip',
   aspect: 'landscape',
-  phrases: ['正在分析手部…', '魔法上色中…', '快好了，再等等…'],
-  emptyTip: '拍一张手部照片，选个款式就能试',
-  customPlaceholder: '想试的款式，例如：蓝色猫眼加碎钻'
+  phrases: ['正在识别手部与指甲边缘…', 'AI 魔法涂装中…', '正在渲染自然水光泽感…', '马上就好啦…'],
+  emptyTip: '拍一张手部照片，或选相册照片试戴',
+  customPlaceholder: '输入想试的款式，例如：极光猫眼加珍珠碎钻'
 });
 
 (function renderStrip() {
@@ -397,4 +600,8 @@ const page = createTryOnPage({
   byCat('nail').forEach(item => strip.appendChild(page.makeCard(item)));
 })();
 
-export default { onEnter: page.onEnter, onLeave: page.onLeave };
+export default {
+  onEnter: page.onEnter,
+  onLeave: page.onLeave,
+  selectInsp: page.selectInsp
+};
