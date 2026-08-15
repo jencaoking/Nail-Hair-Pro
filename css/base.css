@@ -34,9 +34,9 @@ a { color: var(--primary-deep); text-decoration: none; }
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-.container { max-width: 1080px; margin: 0 auto; padding: 0 var(--sp-3); }
+.container { max-width: 1080px; margin: 0 auto; padding-left: var(--sp-3); padding-right: var(--sp-3); }
 
-main { padding-top: calc(var(--header-h) + var(--sp-3)); padding-bottom: calc(76px + var(--safe-b)); }
+main { padding-top: calc(var(--header-h) + var(--sp-4)); padding-bottom: calc(76px + var(--safe-b)); }
 
 /* 动效偏好：一键关闭 */
 @media (prefers-reduced-motion: reduce) {
