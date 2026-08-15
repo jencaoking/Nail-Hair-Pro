@@ -1,7 +1,7 @@
 /* 我的：用户卡（匿名身份 + 今日额度） + 试戴记录（IndexedDB 本地保存）
  * 引擎与密钥由站长在管理后台统一配置，用户端零密钥 */
 import { listHistory, deleteHistory, clearHistory } from '../store/db.js';
-import { get as getSettings } from '../store/settings.js';
+import { get as getSettings, set as setSettings } from '../store/settings.js';
 import { fetchConfig } from '../ai/registry.js';
 import { openModal, confirmModal } from '../ui/modal.js';
 import { renderCompare } from '../ui/compare.js';
@@ -47,7 +47,16 @@ async function renderUserCard() {
     <div class="quota-track" role="progressbar" aria-label="今日已用额度" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${limit}">
       <div class="quota-bar" style="width:${pct}%"></div>
     </div>
-    ${config.announcement ? `<p class="announce">📌 ${config.announcement}</p>` : ''}`;
+    ${config.announcement ? `<p class="announce">📌 ${config.announcement}</p>` : ''}
+    <label class="enhance-row" style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:.85rem;color:var(--muted);cursor:pointer">
+      <input type="checkbox" id="enhance-toggle" ${s.enhance ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary)">
+      <span>增强模式（智能压缩 + 主体聚焦 + 光照校正）</span>
+    </label>`;
+
+  box.querySelector('#enhance-toggle').addEventListener('change', e => {
+    setSettings({ enhance: e.target.checked });
+    toast(e.target.checked ? '已开启增强模式' : '已关闭增强模式');
+  });
 
   if (remain === 0 && limit > 0) {
     box.querySelector('.quota-line').innerHTML = '今天的额度用完啦，明天再来 🍓';
@@ -103,7 +112,7 @@ async function renderHistory() {
       const slot = document.querySelector('#modal-root .cmp-slot');
       if (slot) {
         renderCompare(slot, beforeUrl, afterUrl);
-        slot.querySelector('.cmp').style.aspectRatio = '4 / 3';
+        slot.style.aspectRatio = '4 / 3';
       }
     });
     card.querySelector('.del').addEventListener('click', async () => {

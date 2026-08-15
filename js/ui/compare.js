@@ -1,5 +1,6 @@
 /* before / after 对比滑块：拖拽 + 键盘可达 */
 export function renderCompare(el, beforeUrl, afterUrl) {
+  if (!el) return null;
   el.innerHTML = '';
   el.classList.add('cmp');
 

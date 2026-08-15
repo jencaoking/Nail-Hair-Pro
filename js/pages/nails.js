@@ -2,6 +2,7 @@
  * 状态机：empty → camera / photo → generating → result / error */
 import { cameraSupported, createCamera, explainCameraError } from '../capture/camera.js';
 import { toJpegBlob } from '../capture/preprocess.js';
+import { isEnhance } from '../store/settings.js';
 import { renderInspCard, byId, byCat } from '../data/inspirations.js';
 import { buildPrompt, genSize } from '../data/prompts.js';
 import { tryOn } from '../ai/api.js';
@@ -106,7 +107,10 @@ export function createTryOnPage(opts) {
     fileInput.value = '';
     if (!file) return;
     try {
-      const blob = await toJpegBlob(file);
+      const blob = await toJpegBlob(file, {
+        enhance: isEnhance(),
+        subject: cat === 'nail' ? 'skin' : 'none'
+      });
       setPhoto(blob);
       toast('照片准备好啦，选个款式试试');
     } catch (e) {
@@ -145,8 +149,15 @@ export function createTryOnPage(opts) {
   }
 
   async function takeShot() {
-    const blob = await camera.capture();
+    let blob = await camera.capture();
     stopCameraUI();
+    // 拍照路径同样经过增强预处理（主体裁剪/光照/自适应质量）
+    try {
+      blob = await toJpegBlob(blob, {
+        enhance: isEnhance(),
+        subject: cat === 'nail' ? 'skin' : 'none'
+      });
+    } catch (e) { /* 增强失败则退回原始照片 */ }
     setPhoto(blob);
     toast('拍到啦');
   }
@@ -334,8 +345,11 @@ export function createTryOnPage(opts) {
         </div>
         <p class="result-meta">由 ${provider.label} 生成${insp ? ' · ' + insp.title : ''} · 仅供参考</p>
       </div>`;
-    renderCompare(resultEl.querySelector('.cmp-slot'), photoUrl, afterUrl);
-    resultEl.querySelector('.cmp-slot .cmp').style.aspectRatio = aspect === 'portrait' ? '3 / 4' : '4 / 3';
+    const slot = resultEl.querySelector('.cmp-slot');
+    if (slot) {
+      renderCompare(slot, photoUrl, afterUrl);
+      slot.style.aspectRatio = aspect === 'portrait' ? '3 / 4' : '4 / 3';
+    }
   }
 
   resultEl.addEventListener('click', e => {

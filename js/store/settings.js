@@ -10,7 +10,7 @@ function genId() {
   return 'u' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 }
 
-const DEFAULTS = { clientId: '', seenGuide: false };
+const DEFAULTS = { clientId: '', seenGuide: false, enhance: false };
 
 export function get() {
   try {
@@ -33,3 +33,4 @@ export function set(patch) {
 }
 
 export const getClientId = () => get().clientId;
+export const isEnhance = () => !!get().enhance;
