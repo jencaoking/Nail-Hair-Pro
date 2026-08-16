@@ -211,12 +211,20 @@ const gemini = {
     return blobOf(inline.data, inline.mime_type || inline.mimeType || 'image/png');
   },
   async verify(ctx) {
+    // 用现行模型做轻量文本外呼验证密钥；不要用已下架模型（如 gemini-2.0-flash，访问会 404）
     const res = await pfetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(ctx.keys.gemini)}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] }) }
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(ctx.keys.gemini)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
+      }
     );
     if (res.status === 429) throw new AIError('RateLimit', '密钥有效，但已达频率上限');
-    if (!res.ok) throw new AIError('Quota', '密钥无效（' + res.status + '）');
+    if (res.status === 401 || res.status === 403) throw new AIError('Quota', '密钥无效（' + res.status + '）');
+    if (res.status === 404) throw new AIError('Quota', '验证模型不存在（404），可能需更新服务端模型配置');
+    if (!res.ok) throw new AIError('Network', 'Gemini 验证失败（' + res.status + '）');
     return '密钥有效';
   }
 };
