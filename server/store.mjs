@@ -89,10 +89,14 @@ function mergeRaw(raw) {
   };
 }
 
-/* ---------- KV 读写（Upstash Redis REST，零依赖） ---------- */
+/* ---------- KV 读写（Upstash Redis REST，零依赖） ----------
+ * 加超时兜底：KV 不可达时快速失败并走内存降级，避免整个请求挂死（Vercel 超时后前端会拿到非 JSON 响应）。 */
+const KV_TIMEOUT = 8000;
+
 async function kvGet() {
   const res = await fetch(`${KV_URL}/get/${KV_KEY}`, {
-    headers: { 'Authorization': `Bearer ${KV_TOKEN}` }
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}` },
+    signal: AbortSignal.timeout(KV_TIMEOUT)
   });
   if (!res.ok) throw new Error('KV get HTTP ' + res.status);
   const j = await res.json().catch(() => null);
@@ -103,7 +107,8 @@ async function kvSet(jsonStr) {
   const res = await fetch(`${KV_URL}/pipeline`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify([['SET', KV_KEY, jsonStr]])
+    body: JSON.stringify([['SET', KV_KEY, jsonStr]]),
+    signal: AbortSignal.timeout(KV_TIMEOUT)
   });
   if (!res.ok) throw new Error('KV set HTTP ' + res.status);
 }
