@@ -64,8 +64,11 @@ const DEFAULTS = () => ({
 
 let cache = null;
 /* 数据来源：'kv'（KV 读取成功，可安全写回）| 'file'（本地文件）| 'defaults'（读取失败，内存降级态）。
- * 降级态下禁止写回，防止把空默认值覆盖真实数据（否则一次 KV 抖动就会清空所有用户档案）。 */
+ * 降级态下不能直接写回（会把空默认值覆盖真实数据），但会先尝试读 KV 真实数据、
+ * 合并本会话的管理改动后再写，见 persistMerged()。 */
 let dataOrigin = 'defaults';
+let lastKvLoad = 0;                       // 最近一次从 KV 加载的时间戳（热实例周期刷新用）
+const KV_REFRESH_MS = 30000;              // 热实例最多 30s 落后于后台配置改动
 
 /* 把磁盘/KV 里的原始 JSON 与默认值做深度合并（空密钥回退到环境变量） */
 function mergeRaw(raw) {
@@ -140,6 +143,7 @@ export function ensureLoaded() {
         try {
           cache = mergeRaw(JSON.parse((await kvGet()) || '{}'));
           dataOrigin = 'kv';
+          lastKvLoad = Date.now();
           return;
         } catch (e) {
           console.error('[store] KV 读取失败，改用内存态', e.message);
@@ -170,8 +174,12 @@ export function save() {
   if (IS_VERCEL) {
     if (!KV_URL || !KV_TOKEN) return;   // 未配 KV，仅内存态
     if (dataOrigin !== 'kv') {
-      // 降级态（KV 读取失败）：只读不写，防止空默认值覆盖真实档案数据
-      console.error('[store] 内存降级态，跳过 KV 写入（防止覆盖已存数据）');
+      // 降级态：不直接写（会把空默认值覆盖真实数据），而是先重读 KV 真实数据、
+      // 合并本会话的显式改动（密钥/设置/口令）后再写回；KV 仍不可达则仅存内存。
+      const p = persistMerged()
+        .catch(err => console.error('[store] KV 恢复写失败，改动仅保留在内存', err.message))
+        .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
+      pendingWrites.push(p);
       return;
     }
     const p = kvSet(JSON.stringify(cache))
@@ -183,6 +191,40 @@ export function save() {
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(TMP, JSON.stringify(cache, null, 2));
   fs.renameSync(TMP, FILE);
+}
+
+/* 降级态恢复写：读 KV 真实数据 → 把本会话「与默认值不同」的显式改动合并上去 → 写回。
+ * 只合并确实被改过的字段，避免用空默认值覆盖真实密钥/设置。 */
+async function persistMerged() {
+  const raw = await kvGet();
+  const real = mergeRaw(JSON.parse(raw || '{}'));
+  const def = DEFAULTS();
+  for (const k of Object.keys(cache.keys || {})) {
+    if (JSON.stringify(cache.keys[k]) !== JSON.stringify(def.keys[k])) real.keys[k] = cache.keys[k];
+  }
+  for (const k of Object.keys(cache.settings || {})) {
+    if (JSON.stringify(cache.settings[k]) !== JSON.stringify(def.settings[k])) real.settings[k] = cache.settings[k];
+  }
+  if (cache.admin && JSON.stringify(cache.admin) !== JSON.stringify(def.admin)) real.admin = cache.admin;
+  cache = real;
+  dataOrigin = 'kv';
+  lastKvLoad = Date.now();
+  await kvSet(JSON.stringify(cache));
+}
+
+/* 热实例周期刷新：Vercel 多实例各自持有内存快照，后台改密钥后其它实例 30s 内重新拉取。
+ * 有在途/未落盘改动时跳过，避免覆盖；刷新失败静默，下一轮再试。 */
+export async function maybeRefresh() {
+  if (!IS_VERCEL || dataOrigin !== 'kv') return;
+  if (dirty || pendingWrites.length) return;
+  if (Date.now() - lastKvLoad < KV_REFRESH_MS) return;
+  try {
+    const raw = await kvGet();
+    if (raw) {
+      cache = mergeRaw(JSON.parse(raw));
+      lastKvLoad = Date.now();
+    }
+  } catch { /* 忽略，下一轮再试 */ }
 }
 
 /* 强制落地：本地由 exit 钩子兜底；Vercel 由函数收尾调用，确保在途写完成 */

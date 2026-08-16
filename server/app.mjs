@@ -638,6 +638,8 @@ function serveStatic(req, res, pathname) {
 /* ---------- 请求入口（本地与 Vercel 共用） ---------- */
 export async function handler(req, res) {
   await ready();
+  // Vercel 多实例场景：后台改密钥/设置后，热实例 30s 内重新拉取 KV，避免读到旧配置
+  await store.maybeRefresh().catch(() => {});
   const url = new URL(req.url, 'http://localhost');
   try {
     if (url.pathname === '/api/config') return await handleConfig(req, res, url);
