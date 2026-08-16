@@ -54,7 +54,7 @@ export function adaptiveQuality(imageData, { minQ = 0.7, maxQ = 0.95 } = {}) {
  * 返回主体包围盒 {x,y,w,h} 与占画面比例 ratio；无有效主体返回 null。
  * 用于美甲（手部）场景：自动裁剪出含肤色的手部 ROI，缩小输入范围。
  * 阈值采用经典 YCbCr 肤色区间：77<=Cb<=127, 133<=Cr<=173。 */
-export function detectSkinRegion(imageData, { minRatio = 0.02, face = false } = {}) {
+export function detectSkinRegion(imageData, { minRatio = 0.02 } = {}) {
   const { data, width, height } = imageData;
   const mask = new Uint8Array(width * height);
   for (let i = 0, p = 0; i < data.length; i += 4, p++) {
@@ -65,15 +65,16 @@ export function detectSkinRegion(imageData, { minRatio = 0.02, face = false } = 
   // 连通域标签（8 邻域，两遍法简化为 BFS 泛洪）
   const visited = new Uint8Array(width * height);
   let best = null; // 最大连通域
-  const queue = new Int32Array(width * height);
+  const queue = []; // 动态队列：按需增长，避免按整图尺寸预分配造成主线程卡顿与内存峰值
   for (let p = 0; p < mask.length; p++) {
     if (!mask[p] || visited[p]) continue;
     // 泛洪
-    let head = 0, tail = 0;
-    queue[tail++] = p;
+    let head = 0;
+    queue.length = 0;
+    queue.push(p);
     visited[p] = 1;
     let minX = width, minY = height, maxX = -1, maxY = -1, area = 0;
-    while (head < tail) {
+    while (head < queue.length) {
       const c = queue[head++];
       const cx = c % width, cy = (c / width) | 0;
       if (cx < minX) minX = cx;
@@ -88,7 +89,7 @@ export function detectSkinRegion(imageData, { minRatio = 0.02, face = false } = 
           const nx = cx + dx, ny = cy + dy;
           if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
           const np = ny * width + nx;
-          if (mask[np] && !visited[np]) { visited[np] = 1; queue[tail++] = np; }
+          if (mask[np] && !visited[np]) { visited[np] = 1; queue.push(np); }
         }
       }
     }
@@ -108,7 +109,7 @@ export function detectSkinRegion(imageData, { minRatio = 0.02, face = false } = 
 }
 
 /* 从 ImageData 裁剪出主体区域并回写到目标 canvas，返回实际裁剪结果 */
-export function cropToRegion(ctx, imageData, region) {
+export function cropToRegion(ctx, region) {
   if (!region) return null;
   const { x, y, w, h } = region;
   const canvas = document.createElement('canvas');
@@ -122,7 +123,7 @@ export function cropToRegion(ctx, imageData, region) {
 /* ---------- 3. 光照归一化 ----------
  * 计算亮度直方图；若偏暗（均值低于阈值）或过曝（高亮占比过高）则做伽马校正。
  * 校正用标准 gamma 曲线：out = 255 * (in/255)^gamma。
- * gamma > 1 提亮暗部，gamma < 1 压暗过曝。 */
+ * 注意方向：gamma < 1 提亮（曲线向上凸），gamma > 1 压暗（曲线向下凹）。 */
 export function analyzeLuminance(imageData) {
   const { data } = imageData;
   const hist = new Uint32Array(256);

@@ -42,6 +42,12 @@ export async function toJpegBlob(source, {
   let outQuality = quality;
   let pHash = null;
 
+  // 感知哈希基于「缩放后的整图」计算，与增强处理（裁剪/伽马/质量）解耦，
+  // 保证同一张原图在增强开关两种模式下产生相同 pHash，缓存才能真正跨模式命中。
+  try {
+    pHash = phash(ctx.getImageData(0, 0, w, h));
+  } catch (e) { pHash = null; }
+
   if (enhance) {
     let imageData = ctx.getImageData(0, 0, w, h);
 
@@ -58,7 +64,7 @@ export async function toJpegBlob(source, {
     if (subject !== 'none') {
       const region = detectSkinRegion(imageData);
       if (region && region.w > 40 && region.h > 40) {
-        const cropped = cropToRegion(ctx, imageData, region);
+        const cropped = cropToRegion(ctx, region);
         if (cropped) {
           outCanvas = cropped;
           imageData = cropped.getContext('2d').getImageData(0, 0, cropped.width, cropped.height);
@@ -69,13 +75,6 @@ export async function toJpegBlob(source, {
     // 3) 自适应质量：基于最终画布内容的边缘信息熵
     outQuality = adaptiveQuality(imageData, { minQ: 0.7, maxQ: 0.95 });
   }
-
-  // 计算感知哈希（用于服务端结果缓存/相似去重），基于最终输出画布
-  try {
-    const finalCtx = outCanvas.getContext('2d', { willReadFrequently: true });
-    const finalData = finalCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
-    pHash = phash(finalData);
-  } catch (e) { pHash = null; }
 
   const blob = await new Promise(r => outCanvas.toBlob(r, 'image/jpeg', outQuality));
   if (!blob) throw new Error('图片处理失败');
@@ -100,12 +99,4 @@ export function blobToBase64(blob) {
     fr.onerror = () => reject(fr.error);
     fr.readAsDataURL(blob);
   });
-}
-
-export const dataUri = b64 => `data:image/jpeg;base64,${b64}`;
-
-/* base64 → Blob */
-export async function base64ToBlob(b64, mime = 'image/png') {
-  const res = await fetch(`data:${mime};base64,${b64}`);
-  return res.blob();
 }

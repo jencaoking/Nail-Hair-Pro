@@ -1,6 +1,6 @@
 /* 结果缓存与相似输入去重
  * - 缓存键：图片感知哈希（pHash，由前端计算并随请求上传）+ prompt MD5（服务端计算）
- * - 模糊匹配：pHash 汉明距离 <= 阈值（相似度 > 95%）视为同一张图
+ * - 模糊匹配：pHash 汉明距离 <= 阈值（相似度 > 96%）视为同一张图
  * - 存储：内存 Map（LRU 最近 1000 条）+ 磁盘文件持久化（原子写入）
  * 命中时直接返回缓存结果，跳过 API 调用，降低延迟与成本。
  * 注：pHash 由前端在 canvas 上计算（服务端零依赖、无图像解码器），此处只做缓存与匹配。 */
@@ -18,8 +18,9 @@ const TMP_FILE = CACHE_FILE + '.tmp';
 const IS_VERCEL = !!process.env.VERCEL;
 
 export const MAX_ENTRIES = 1000;
-/* pHash 为 64bit → 汉明距离上限 64；>95% 相似 ≈ 距离 <= 3（64*5%≈3.2） */
-export const HAMMING_THRESHOLD = 3;
+/* pHash 为 64bit → 汉明距离上限 64；>95% 相似对应距离 <= 3（64*5%≈3.2）。
+ * 收紧到 2（≈96.9% 相似），避免不同角度/构图的照片误命中串图。 */
+export const HAMMING_THRESHOLD = 2;
 
 /* prompt MD5 */
 export function md5(s) {
