@@ -88,6 +88,20 @@ const json = (res, code, obj) => {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(body);
 };
+/* 二进制图片响应：图片不再内嵌 JSON（base64 膨胀 33%，且受 Vercel 4.5MB 响应体上限，
+ * 大图会被平台截断导致「服务端成功但前端收不到」）。改为直接返回图片二进制，
+ * provider/额度等元数据放到响应头，前端按 Content-Type 分流解析。 */
+const sendImage = (res, b64, mime, meta = {}) => {
+  res.writeHead(200, {
+    'Content-Type': mime || 'image/png',
+    'X-Provider-Id': String(meta.providerId || ''),
+    'X-Provider-Label': encodeURIComponent(String(meta.providerLabel || '')),
+    'X-Remaining-Today': String(meta.remainingToday != null ? meta.remainingToday : 0),
+    'X-Cached': meta.cached ? '1' : '0',
+    'Cache-Control': 'no-store'
+  });
+  res.end(Buffer.from(b64, 'base64'));
+};
 const readBody = (req, limit = 15 * 1024 * 1024) => new Promise((resolve, reject) => {
   let size = 0; const chunks = [];
   req.on('data', c => {
@@ -237,13 +251,11 @@ async function handleTryon(req, res) {
       store.recordResearch({ clientId, cat: body.cat, prompt, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, inputB64: img.b64, outputB64: hit.entry.image });
       store.saveDebounced();
       const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
-      return json(res, 200, {
-        ok: true,
-        image: `data:${hit.entry.mime || 'image/png'};base64,${hit.entry.image}`,
-        provider: { id: hit.entry.provider || 'cache', label: hit.entry.provider || '缓存' },
-        cached: true,
+      return sendImage(res, hit.entry.image, hit.entry.mime || 'image/png', {
+        providerId: hit.entry.provider || 'cache',
+        providerLabel: hit.entry.provider || '缓存',
         remainingToday: updatedQuota.remainingToday,
-        ms: Date.now() - t0
+        cached: true
       });
     }
   }
@@ -276,13 +288,11 @@ async function handleTryon(req, res) {
     store.recordResearch({ clientId, cat: body.cat, prompt, provider: provider.id, ok: true, ms: Date.now() - t0, inputB64: img.b64, outputB64: b64 });
     store.saveDebounced();
     const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
-    return json(res, 200, {
-      ok: true,
-      image: `data:${mime};base64,${b64}`,
-      provider: { id: provider.id, label: provider.label },
-      cached: false,
+    return sendImage(res, b64, mime, {
+      providerId: provider.id,
+      providerLabel: provider.label,
       remainingToday: updatedQuota.remainingToday,
-      ms: Date.now() - t0
+      cached: false
     });
   } catch (err) {
     const e = normalizeError(err);

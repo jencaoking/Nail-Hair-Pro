@@ -45,6 +45,18 @@ export async function tryOn({ imageBlob, prompt, width, height, cat, engine, sig
 
   if (signal && signal.aborted) throw new AIError('UserCancel', '已取消');
 
+  // 成功 = 二进制图片响应（Content-Type: image/*），元数据在响应头；
+  // 失败 = JSON（{ ok:false, error:{type,message} }）。先按 Content-Type 分流。
+  const ct = res.headers.get('content-type') || '';
+  if (ct.startsWith('image/')) {
+    const blob = await res.blob();
+    const provider = {
+      id: res.headers.get('x-provider-id') || '',
+      label: decodeURIComponent(res.headers.get('x-provider-label') || '')
+    };
+    return { blob, provider, cached: res.headers.get('x-cached') === '1' };
+  }
+
   let j = null;
   try { j = await res.json(); } catch { /* 非结构化响应（平台错误页 504/413 等） */ }
 
@@ -60,8 +72,12 @@ export async function tryOn({ imageBlob, prompt, width, height, cat, engine, sig
     throw new AIError(type, (j && j.error && j.error.message) || `服务返回 ${res.status}`);
   }
 
-  const blob = await (await fetch(j.image)).blob();
-  return { blob, provider: j.provider };
+  // 兜底：兼容旧版仍返回 JSON 成功（内嵌 data URL）的情况
+  if (j.image) {
+    const blob = await (await fetch(j.image)).blob();
+    return { blob, provider: j.provider, cached: !!j.cached };
+  }
+  throw new AIError('Network', '服务返回异常');
 }
 
 export { normalizeError };
