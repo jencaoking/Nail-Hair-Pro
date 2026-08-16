@@ -418,7 +418,7 @@ async function pickImage(j, signal) {
   throw new AIError('Network', '返回里没有图片');
 }
 
-export const providers = [pollinations, gemini, siliconflow, agnes, cloudflare, huggingface];
+export const providers = [agnes, pollinations, gemini, siliconflow, cloudflare, huggingface];
 export const byId = id => providers.find(p => p.id === id) || null;
 
 export function hasKey(provider, keys) {
