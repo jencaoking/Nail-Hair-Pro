@@ -340,6 +340,59 @@ const cloudflare = {
   }
 };
 
+const agnes = {
+  id: 'agnes',
+  label: 'Agnes Image 2.1 Flash',
+  requiresKey: true,
+  keyShape: { key: 'Agnes API Key' },
+  docsUrl: 'https://wiki.agnes-ai.com/zh-Hans/docs/agnes-image-21-flash',
+  notes: '文生图/图生图/多图合成，支持 1K–4K 档位与多种宽高比。图生图 base64 直传不经图床，高信息密度图像效果好。',
+  async edit({ imageBlob, prompt, width, height, signal, ctx }) {
+    const b64 = await b64Of(imageBlob);
+    const body = {
+      model: 'agnes-image-2.1-flash',
+      prompt,
+      size: `${width}x${height}`,
+      extra_body: {
+        image: [`data:image/jpeg;base64,${b64}`],
+        response_format: 'b64_json'
+      }
+    };
+    const res = await pfetch('https://apihub.agnes-ai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + ctx.keys.agnes, 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify(body)
+    });
+    if (res.status === 429) throw new AIError('RateLimit', 'Agnes 限流');
+    if (res.status === 401 || res.status === 403) throw new AIError('Quota', 'Agnes 密钥无效或额度不足');
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      if (/content|safety|blocked/i.test(t)) throw new AIError('Content', 'Agnes 内容审核未通过');
+      throw new AIError('Network', `Agnes ${res.status}`);
+    }
+    const j = await res.json();
+    return await pickImage(j, signal);
+  },
+  async verify(ctx) {
+    const res = await pfetch('https://apihub.agnes-ai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + ctx.keys.agnes, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({
+        model: 'agnes-image-2.1-flash',
+        prompt: 'a tiny test',
+        size: '1K',
+        extra_body: { response_format: 'b64_json' }
+      })
+    });
+    if (res.status === 429) throw new AIError('RateLimit', '密钥有效，但已达频率上限');
+    if (res.status === 401 || res.status === 403) throw new AIError('Quota', '密钥无效（' + res.status + '）');
+    if (!res.ok) throw new AIError('Network', 'Agnes 验证失败（' + res.status + '）');
+    return '密钥有效';
+  }
+};
+
 async function pickImage(j, signal) {
   const item = j && j.data && j.data[0];
   if (!item) throw new AIError('Network', '引擎返回为空');
@@ -352,7 +405,7 @@ async function pickImage(j, signal) {
   throw new AIError('Network', '返回里没有图片');
 }
 
-export const providers = [pollinations, gemini, siliconflow, cloudflare, huggingface];
+export const providers = [pollinations, gemini, siliconflow, agnes, cloudflare, huggingface];
 export const byId = id => providers.find(p => p.id === id) || null;
 
 export function hasKey(provider, keys) {

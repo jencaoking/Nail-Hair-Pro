@@ -92,6 +92,7 @@ function mergeRaw(raw) {
       pollinations: (r.keys && r.keys.pollinations) || def.keys.pollinations,
       siliconflow: (r.keys && r.keys.siliconflow) || def.keys.siliconflow,
       huggingface: (r.keys && r.keys.huggingface) || def.keys.huggingface,
+      agnes: (r.keys && r.keys.agnes) || def.keys.agnes,
       imgbb: (r.keys && r.keys.imgbb) || def.keys.imgbb,
       cloudflare: {
         accountId: (r.keys && r.keys.cloudflare && r.keys.cloudflare.accountId) || def.keys.cloudflare.accountId,
@@ -612,7 +613,7 @@ export function maskedKeys() {
   const d = load();
   const mask = v => !v ? '' : v.length <= 6 ? '***' : v.slice(0, 3) + '…' + v.slice(-4);
   const out = { imgbb: mask(d.keys.imgbb || ''), pollinations: mask(d.keys.pollinations || '') };
-  for (const k of ['gemini', 'siliconflow', 'huggingface']) out[k] = mask(d.keys[k] || '');
+  for (const k of ['gemini', 'siliconflow', 'huggingface', 'agnes']) out[k] = mask(d.keys[k] || '');
   out.cloudflare = {
     accountId: d.keys.cloudflare.accountId || '',
     token: mask(d.keys.cloudflare.token || '')
