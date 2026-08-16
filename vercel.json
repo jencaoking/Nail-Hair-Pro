@@ -9,6 +9,7 @@
     { "src": "assets/**", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api" },
     { "src": "/admin", "dest": "/admin.html" },
     { "src": "/admin/", "dest": "/admin.html" }
   ]
