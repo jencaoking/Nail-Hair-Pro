@@ -821,18 +821,22 @@
 /* ---- 主题模式分段选择器 (Theme Selector Segment) ---- */
 .theme-selector-group {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
 }
 .theme-option-btn {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column; /* 图标在上、文本在下：避免窄屏下 emoji+文字横排挤断 */
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  min-width: 88px; /* 三个按钮在窄屏下也能排成一行（≈360-左右留白） */
+  flex: 1 1 88px;
   font-family: var(--font-title);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 900;
   border-radius: var(--r-s);
   border: 3px solid var(--border-ink);
@@ -841,6 +845,13 @@
   box-shadow: 2px 2px 0px 0px rgba(26, 26, 26, 1);
   cursor: pointer;
   transition: all 0.15s ease;
+}
+.theme-option-btn > span:first-child {
+  font-size: 1.25rem; /* emoji 视觉权重稍大，作为图标 */
+  line-height: 1;
+}
+.theme-option-btn > span:last-child {
+  white-space: nowrap; /* 文本不换行（避免再被挤成竖排三行） */
 }
 [data-theme="dark"] .theme-option-btn {
   box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 0.9);
