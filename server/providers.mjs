@@ -365,11 +365,16 @@ const agnes = {
       body: JSON.stringify(body)
     });
     if (res.status === 429) throw new AIError('RateLimit', 'Agnes 限流');
-    if (res.status === 401 || res.status === 403) throw new AIError('Quota', 'Agnes 密钥无效或额度不足');
+    if (res.status === 401 || res.status === 403) {
+      const t = await res.text().catch(() => '');
+      console.error(`[agnes] ${res.status} 密钥无效: ${t.slice(0, 200)}`);
+      throw new AIError('Quota', 'Agnes 密钥无效或额度不足');
+    }
     if (!res.ok) {
       const t = await res.text().catch(() => '');
+      console.error(`[agnes] 请求失败 ${res.status}: ${t.slice(0, 300)}`);
       if (/content|safety|blocked/i.test(t)) throw new AIError('Content', 'Agnes 内容审核未通过');
-      throw new AIError('Network', `Agnes ${res.status}`);
+      throw new AIError('Network', `Agnes 返回 ${res.status}${t ? '（' + t.slice(0, 120) + '）' : ''}`);
     }
     const j = await res.json();
     return await pickImage(j, signal);
@@ -387,8 +392,16 @@ const agnes = {
       })
     });
     if (res.status === 429) throw new AIError('RateLimit', '密钥有效，但已达频率上限');
-    if (res.status === 401 || res.status === 403) throw new AIError('Quota', '密钥无效（' + res.status + '）');
-    if (!res.ok) throw new AIError('Network', 'Agnes 验证失败（' + res.status + '）');
+    if (res.status === 401 || res.status === 403) {
+      const t = await res.text().catch(() => '');
+      console.error(`[agnes] 验证密钥无效 ${res.status}: ${t.slice(0, 200)}`);
+      throw new AIError('Quota', '密钥无效（' + res.status + '）');
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      console.error(`[agnes] 验证失败 ${res.status}: ${t.slice(0, 300)}`);
+      throw new AIError('Network', 'Agnes 验证失败（' + res.status + '）');
+    }
     return '密钥有效';
   }
 };
@@ -437,12 +450,14 @@ export async function tryOn({ imageBlob, prompt, width, height, ctx, onEngine })
 
   const t0 = Date.now();
   let lastErr = null;
+  const failures = [];   // 每个引擎的失败摘要，便于前端/日志定位真实原因
   for (let i = 0; i < chain.length; i++) {
     const provider = chain[i];
     if (onEngine) onEngine({ index: i + 1, total: chain.length, provider });
     const remaining = TOTAL_DEADLINE_MS - (Date.now() - t0);
     if (remaining <= 0) {
       lastErr = new AIError('Timeout', '生成超时');
+      failures.push(`${provider.id}·Timeout`);
       break;
     }
     const ctrl = new AbortController();
@@ -453,12 +468,16 @@ export async function tryOn({ imageBlob, prompt, width, height, ctx, onEngine })
     } catch (err) {
       lastErr = normalizeError(err);
       if (ctrl.signal.aborted) lastErr = new AIError('Timeout', '生成超时');
+      console.error(`[tryon] ${provider.id} 失败(${lastErr.type}): ${lastErr.message}`);
+      failures.push(`${provider.id}·${lastErr.type}`);
       if (lastErr.type === 'Content') throw lastErr;
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastErr || new AIError('Network', '所有引擎都失败了');
+  const e = lastErr || new AIError('Network', '所有引擎都失败了');
+  if (failures.length) e.message = `${e.message} [${failures.join(' → ')}]`;
+  throw e;
 }
 
 export const randomId = () => crypto.randomUUID();
