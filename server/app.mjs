@@ -212,7 +212,8 @@ async function handleTryon(req, res) {
   if (!clientId) return json(res, 400, { ok: false, error: { type: 'Network', message: '缺少有效的 clientId' } });
   const img = parseDataUrl(body.image);
   if (!img || img.b64.length < 100) return json(res, 400, { ok: false, error: { type: 'Network', message: '照片缺失或格式不支持' } });
-  if (!body.prompt || String(body.prompt).length > 600) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述不合法' } });
+  if (!body.prompt || !String(body.prompt).trim()) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述不能为空' } });
+  if (String(body.prompt).length > 2000) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述过长，请精简到 2000 字以内' } });
 
   const ip = parseIp(req);
   const ua = req.headers['user-agent'] || '';
