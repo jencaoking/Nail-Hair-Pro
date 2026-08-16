@@ -59,18 +59,18 @@ async function renderUserCard() {
       </span>
       <div class="who">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <strong>小莓友 <span class="chip plain uid">ID: ${shortId}</span></strong>
+          <strong>小莓友 <span class="chip plain uid">ID: ${esc(shortId)}</span></strong>
           ${customBadge}
           ${bonusBadge}
         </div>
         <span class="quota-line">今日剩余试戴 <b>${remain}</b> 次 / 共 ${effective} 次</span>
       </div>
-      <span class="chip mint engine-chip" title="首选 AI 引擎">✨ ${engine}</span>
+      <span class="chip mint engine-chip" title="首选 AI 引擎">✨ ${esc(engine)}</span>
     </div>
     <div class="quota-track" role="progressbar" aria-label="今日已用额度" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${effective}">
       <div class="quota-bar" style="width:${pct}%"></div>
     </div>
-    ${config.announcement ? `<p class="announce">📌 ${config.announcement}</p>` : ''}
+    ${config.announcement ? `<p class="announce">📌 ${esc(config.announcement)}</p>` : ''}
     <div style="margin-top:16px;padding-top:14px;border-top:2px dashed var(--border-ink)">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <span style="font-family:var(--font-title);font-size:0.92rem;font-weight:900;color:var(--ink-strong)">🎨 外观主题模式</span>
@@ -237,13 +237,13 @@ async function renderHistory() {
 
     card.innerHTML = `
       <div class="pic" title="点击查看前后对比">
-        <img alt="${rec.title}试戴结果" loading="lazy" decoding="async">
+        <img alt="${esc(rec.title)}试戴结果" loading="lazy" decoding="async">
       </div>
       <div class="meta">
         <span style="min-width:0">
           <span class="chip plain" style="margin-right:4px">${CAT_LABEL[rec.cat] || rec.cat}</span>
-          <span class="t">${rec.title}</span>
-          <span class="d" style="display:block">${dateStr}${rec.provider ? ' · ' + rec.provider : ''}</span>
+          <span class="t">${esc(rec.title)}</span>
+          <span class="d" style="display:block">${dateStr}${rec.provider ? ' · ' + esc(rec.provider) : ''}</span>
         </span>
         <div style="display:flex;align-items:center;gap:4px">
           <a class="del" download="tryon-${rec.id}.jpg" href="${afterUrl}" title="下载效果图" style="color:var(--primary)">

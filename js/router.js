@@ -34,8 +34,28 @@ export function start() {
   activate();
 }
 
+/* 切换路由并返回一个「页面已激活」的 Promise。
+ * 之前调用方用 setTimeout(50ms) 猜测「路由切换 + 页面初始化」的耗时，脆弱且不可靠；
+ * 改为在 hashchange 触发（即 activate() 完成）后 resolve，调用方可 await 后再操作页面，
+ * 无需猜延时，未来 go() 若改成异步加载页面也不会失效。 */
 export function go(name) {
-  location.hash = '#/' + name;
+  const target = '#/' + name;
+  if (location.hash === target) {
+    return Promise.resolve();   // 已是目标页，直接放行
+  }
+  location.hash = target;
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('hashchange', onHash);
+      resolve();
+    };
+    const onHash = () => finish();
+    window.addEventListener('hashchange', onHash);
+    setTimeout(finish, 200);   // 兜底：异常环境未触发 hashchange 时也能 resolve
+  });
 }
 
 export function current() {

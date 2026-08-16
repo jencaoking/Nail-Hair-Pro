@@ -44,8 +44,7 @@ export function createTryOnPage(opts) {
   let camera = null;
   let abortCtrl = null;
   let phraseTimer = null;
-  let lastResultBlob = null;
-  let lastProvider = null;
+  let lastResultUrl = null;   // 最近一次生成结果的 objectURL，下次生成前回收，避免「生成→换款→再生成」高频泄漏
 
   const delay = ms => new Promise(r => setTimeout(r, ms));
   const detectSubject = () => (currentCategory() === 'nail' ? 'hand' : 'face');
@@ -216,7 +215,7 @@ export function createTryOnPage(opts) {
     }
   });
 
-  window.addEventListener('paste', async e => {
+  const onPaste = async e => {
     if (sourceEl.offsetParent === null) return; // 页面未激活时不处理
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
     for (const item of items) {
@@ -227,7 +226,11 @@ export function createTryOnPage(opts) {
         break;
       }
     }
-  });
+  };
+  // paste 监听器随页面激活/离开对称绑定与解绑，避免 window 上累积永久监听器
+  let pasteBound = false;
+  const bindPaste = () => { if (!pasteBound) { pasteBound = true; window.addEventListener('paste', onPaste); } };
+  const unbindPaste = () => { if (pasteBound) { pasteBound = false; window.removeEventListener('paste', onPaste); } };
 
   /* ---------- 源面板事件委托 ---------- */
   sourceEl.addEventListener('click', async e => {
@@ -367,6 +370,7 @@ export function createTryOnPage(opts) {
   /* ---------- 关键点检测预处理：异步识别手部/面部结构，注入生成 prompt ---------- */
   function runDetection(blob) {
     const subject = detectSubject();
+    const myBlob = blob;   // 捕获本次检测对应的照片，用于乱序返回时比对丢弃过期结果
     photoStructure = null;
     structurePromise = null;
     updateDetectBadge('detecting', subject);
@@ -378,11 +382,14 @@ export function createTryOnPage(opts) {
       delay(5000).then(() => null)
     ])
       .then(structure => {
+        // 照片已更换：这次检测结果是「上一张照片」的，丢弃，避免错误结构注入 prompt
+        if (photoBlob !== myBlob) return null;
         photoStructure = structure;
         updateDetectBadge(structure ? 'done' : 'none', subject, structure);
         return structure;
       })
       .catch(() => {
+        if (photoBlob !== myBlob) return null;
         photoStructure = null;
         updateDetectBadge('none', subject);
         return null;
@@ -619,7 +626,11 @@ export function createTryOnPage(opts) {
   }
 
   function renderResult(blob, provider) {
+    // 回收上一次结果图的 objectURL：blob URL 底层数据只有显式 revoke 或刷新才释放，
+    // 「生成→换款→再生成」是核心主循环，不回收会持续累积几 MB 的内存泄漏
+    if (lastResultUrl) URL.revokeObjectURL(lastResultUrl);
     const afterUrl = URL.createObjectURL(blob);
+    lastResultUrl = afterUrl;
     const insp = selectedInspId ? byId(selectedInspId) : null;
     resultEl.innerHTML = `
       <div class="result-figure">
@@ -632,7 +643,7 @@ export function createTryOnPage(opts) {
           <button class="btn btn-lav btn-sm" data-ract="again">🔄 换个款式</button>
           <button class="btn btn-ghost btn-sm" data-ract="newphoto">📸 换张照片</button>
         </div>
-        <p class="result-meta">由 ${provider.label} 渲染${insp ? ' · 款式「' + insp.title + '」' : ''} · 仅供参考</p>
+        <p class="result-meta">由 ${esc(provider.label)} 渲染${insp ? ' · 款式「' + esc(insp.title) + '」' : ''} · 仅供参考</p>
       </div>`;
 
     const slot = resultEl.querySelector('.cmp-slot');
@@ -675,9 +686,11 @@ export function createTryOnPage(opts) {
       updateGenerateLabel();
       renderPromptChips();
       initEnginePicker();
+      bindPaste();
     },
     onLeave() {
       stopCameraUI();
+      unbindPaste();
     }
   };
 }

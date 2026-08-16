@@ -11,6 +11,10 @@ let currentFilter = 'all';
 let searchQuery = '';
 let rendered = false;
 
+/* ⚠️ 注意：除 all/rec/hot/nail/hairColor/hairStyle 外的 key（显白/清透/秋冬/温柔）是「标签值」，
+ * 必须与 data/inspirations.js 中灵感卡的 tags 字段字符串完全一致才能匹配。
+ * 若运营修改了某灵感卡的标签措辞（如「显白」改「提亮显白」），对应筛选会悄悄失效，
+ * 改动时请两处同步。 */
 const FILTER_TAGS = [
   { key: 'all', label: '全部精选 (52)' },
   { key: 'rec', label: '🎯 算法推荐' },
@@ -26,7 +30,13 @@ const FILTER_TAGS = [
 
 async function getFilteredList() {
   if (currentFilter === 'rec') {
-    return await fetchPersonalizedRecommendations({ limit: 18 });
+    // 算法推荐接口失败/超时降级为全量精选，避免筛选页静默空白
+    try {
+      return await fetchPersonalizedRecommendations({ limit: 18 });
+    } catch (e) {
+      console.warn('[home] 个性化推荐失败，降级为精选列表', e);
+      return inspirations;
+    }
   }
 
   let list = inspirations;
@@ -60,7 +70,15 @@ async function renderPersonaBanner() {
 
   if (!banner || !recsBox) return;
 
-  const recs = await fetchPersonalizedRecommendations({ limit: 4 });
+  // 个性化推荐接口挂了不应让 banner 静默消失/报未捕获 rejection，降级隐藏即可
+  let recs = null;
+  try {
+    recs = await fetchPersonalizedRecommendations({ limit: 4 });
+  } catch (e) {
+    console.warn('[home] 推荐 banner 加载失败', e);
+    banner.hidden = true;
+    return;
+  }
   const persona = getCachedPersona();
 
   if (recs && recs.length > 0) {
@@ -75,14 +93,14 @@ async function renderPersonaBanner() {
     recsBox.innerHTML = '';
     recs.forEach(item => {
       const card = renderInspCard(item);
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         trackBehavior({ type: 'view_insp', inspId: item.id, cat: item.cat, tags: item.tags });
         if (item.cat === 'nail') {
-          go('nails');
-          setTimeout(() => nailsPage.selectInsp(item.id), 50);
+          await go('nails');
+          nailsPage.selectInsp(item.id);
         } else {
-          go('hair');
-          setTimeout(() => hairPage.selectInsp(item.id), 50);
+          await go('hair');
+          hairPage.selectInsp(item.id);
         }
       });
       recsBox.appendChild(card);
@@ -107,15 +125,15 @@ async function renderInspirations() {
 
   list.forEach(item => {
     const card = renderInspCard(item);
-    card.addEventListener('click', () => {
+    card.addEventListener('click', async () => {
       trackBehavior({ type: 'view_insp', inspId: item.id, cat: item.cat, tags: item.tags });
       // 路由并自动选中对应灵感
       if (item.cat === 'nail') {
-        go('nails');
-        setTimeout(() => nailsPage.selectInsp(item.id), 50);
+        await go('nails');
+        nailsPage.selectInsp(item.id);
       } else {
-        go('hair');
-        setTimeout(() => hairPage.selectInsp(item.id), 50);
+        await go('hair');
+        hairPage.selectInsp(item.id);
       }
     });
     grid.appendChild(card);
