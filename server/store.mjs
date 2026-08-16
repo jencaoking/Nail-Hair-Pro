@@ -56,6 +56,7 @@ const DEFAULTS = () => ({
       token: process.env.CLOUDFLARE_API_TOKEN || ''
     },
     huggingface: process.env.HUGGINGFACE_API_KEY || '',
+    agnes: process.env.AGNES_API_KEY || '',
     imgbb: process.env.IMGBB_API_KEY || ''
   },
   users: {},                                       // clientId → 记录
