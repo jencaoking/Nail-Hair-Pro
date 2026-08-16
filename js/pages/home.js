@@ -1,8 +1,6 @@
 /* 首页：探索 52 款灵感 + 智能画像专属推荐 + 类别标签过滤 + 实时搜索 + 新人引导 */
 import { inspirations, dailyPicks, renderInspCard } from '../data/inspirations.js';
-import { get as getSettings, set as setSettings } from '../store/settings.js';
 import { trackBehavior, getCachedPersona, fetchPersonalizedRecommendations } from '../store/userLearning.js';
-import { openModal } from '../ui/modal.js';
 import { go } from '../router.js';
 import nailsPage from './nails.js';
 import hairPage from './hair.js';
@@ -175,44 +173,6 @@ function setupFilterBar() {
   }
 }
 
-function maybeGuide() {
-  const s = getSettings();
-  if (s.seenGuide) return;
-  openModal({
-    title: '✨ 欢迎来到莓好灵感屋',
-    body: `
-      <div style="display:grid;gap:14px;padding:4px 0">
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <span class="chip" style="flex-shrink:0;margin-top:2px">第 1 步</span>
-          <div><strong>拍摄或上传照片</strong>：拍一张手部或面部清晰照片，也支持从相册选择或一键试用模特照片。</div>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <span class="chip lav" style="flex-shrink:0;margin-top:2px">第 2 步</span>
-          <div><strong>挑选心仪款式</strong>：点击 52 款精选灵感（猫眼、法式、锁骨发等），或自由输入文字描述。</div>
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <span class="chip mint" style="flex-shrink:0;margin-top:2px">第 3 步</span>
-          <div><strong>查看前后对比</strong>：左右拖动滑块或并排查看试戴效果，喜欢即可一键保存。</div>
-        </div>
-        <p style="font-size:0.82rem;color:var(--muted);margin-top:6px;background:var(--bg-subtle);padding:8px 12px;border-radius:var(--r-s)">
-          🔒 免登录、免配置，每日提供免费试戴体验。
-        </p>
-      </div>`,
-    actions: [
-      {
-        key: 'go',
-        label: '立即开启体验 ✨',
-        cls: 'btn-primary',
-        onClick: () => {
-          setSettings({ seenGuide: true });
-          go('nails');
-        }
-      }
-    ],
-    onClose: () => setSettings({ seenGuide: true })
-  });
-}
-
 export default {
   onEnter() {
     if (!rendered) {
@@ -221,7 +181,6 @@ export default {
     }
     renderPersonaBanner();
     renderInspirations();
-    maybeGuide();
   }
 };
 

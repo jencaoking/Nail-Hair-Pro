@@ -793,6 +793,18 @@
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0px 0px rgba(26, 26, 26, 1);
 }
+/* 点击后的「已添加」高亮反馈：绿色实心 + 打勾提示，持续 0.9s，让用户清楚词条已进入描述框 */
+.prompt-chip.added {
+  background: var(--green, #22c55e);
+  color: #ffffff;
+  border-color: #1a1a1a;
+  box-shadow: 1px 1px 0px 0px rgba(26, 26, 26, 1);
+  transform: translate(1px, 1px);
+}
+.prompt-chip:focus-visible {
+  outline: 3px solid var(--primary, #f43f6e);
+  outline-offset: 2px;
+}
 
 /* ---- 漫画风格主题切换按钮 (Comic Theme Toggle) ---- */
 .theme-toggle-btn {

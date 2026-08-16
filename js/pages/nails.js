@@ -9,7 +9,7 @@ import { buildPrompt, genSize } from '../data/prompts.js';
 import { detectStructure } from '../ai/landmarks.js';
 import { getSamplePhoto } from '../data/samples.js';
 import { tryOn } from '../ai/api.js';
-import { normalizeError, copyFor } from '../ai/errors.js';
+import { AIError, normalizeError, copyFor } from '../ai/errors.js';
 import { bumpUsage, fetchConfig } from '../ai/registry.js';
 import { renderCompare } from '../ui/compare.js';
 import { openModal } from '../ui/modal.js';
@@ -190,10 +190,16 @@ export function createTryOnPage(opts) {
     show(enginePickerRow);
   }
 
-  /* ---------- 渲染快捷提示词 ---------- */
+  /* ---------- 渲染快捷提示词 ----------
+   * 说明：这些 chip 是「快捷描述词」，点击后填入上方的自定义描述输入框，
+   * 而非「选择款式」（选中款式靠下方 .insp-card 灵感卡）。两者语义不同，已通过
+   * aria-label 与 title 明确标注，避免用户把快捷词误当成款式选择。 */
   function renderPromptChips() {
     const list = PROMPT_SUGGESTIONS[currentCategory()] || PROMPT_SUGGESTIONS[cat] || [];
-    chipsBox.innerHTML = list.map(text => `<span class="prompt-chip" data-chip="${text}">${text}</span>`).join('');
+    chipsBox.innerHTML = list.map(text =>
+      `<span class="prompt-chip" data-chip="${text}" role="button" tabindex="0" aria-label="添加描述：${text.replace(/^[^\s]+\s*/, '')}">${text}</span>`
+    ).join('');
+    chipsBox.title = '点击快捷词条，快速填入自定义描述';
   }
   renderPromptChips();
 
@@ -201,10 +207,27 @@ export function createTryOnPage(opts) {
     const chip = e.target.closest('[data-chip]');
     if (!chip) return;
     const val = chip.dataset.chip.replace(/^[^\s]+\s*/, ''); // 去除前面的 emoji
-    if (customInput.value.includes(val)) return;
+    if (customInput.value.includes(val)) {
+      toast(`描述中已包含「${val}」`, 'err');
+      customInput.focus();
+      return;
+    }
     customInput.value = (customInput.value.trim() ? customInput.value.trim() + '，' : '') + val;
-    toast(`已添加标签：${val}`);
+    // 点击反馈：chip 短暂高亮表示「已添加到描述」，toast 同步说明，生成按钮文字随之更新
+    chip.classList.add('added');
+    setTimeout(() => chip.classList.remove('added'), 900);
+    toast(`已添加到描述：${val}`);
     customInput.focus();
+    updateGenerateLabel();
+  });
+
+  // 键盘可达：Enter / 空格 触发与点击一致
+  chipsBox.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const chip = e.target.closest('[data-chip]');
+    if (!chip) return;
+    e.preventDefault();
+    chip.click();
   });
 
   /* ---------- 拖拽与粘贴支持 ---------- */
@@ -636,6 +659,12 @@ export function createTryOnPage(opts) {
   }
 
   function renderResult(blob, provider) {
+    // 防御：引擎偶发返回空图（空 blob），若不拦会渲染空白预览区，用户误以为「没反应」。
+    // 这里显式兜底成错误提示，比一片空白更有排查价值。
+    if (!blob || blob.size === 0) {
+      renderError(new AIError('Network', '生成结果为空，请重试'));
+      return;
+    }
     // 回收上一次结果图的 objectURL：blob URL 底层数据只有显式 revoke 或刷新才释放，
     // 「生成→换款→再生成」是核心主循环，不回收会持续累积几 MB 的内存泄漏
     if (lastResultUrl) URL.revokeObjectURL(lastResultUrl);
