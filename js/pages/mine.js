@@ -38,8 +38,11 @@ async function renderUserCard() {
   const limit = config.dailyLimit || 0;
   const bonus = config.bonusQuota || 0;
   const isCustom = !!config.isCustomLimit;
-  const remain = Math.max(0, limit - used);
-  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  // 服务端已把基础额度 + 赠送额度合并计算（effectiveLimit / remainingToday），
+  // 直接用它展示，否则赠送的额度在用户端永远看不到
+  const effective = config.effectiveLimit != null ? config.effectiveLimit : limit + bonus;
+  const remain = config.remainingToday != null ? config.remainingToday : Math.max(0, effective - used);
+  const pct = effective ? Math.min(100, Math.round((used / effective) * 100)) : 0;
   const engine = config.primary || '自动优化';
 
   const bonusBadge = bonus > 0 ? `<span class="chip" style="background:#e6fffa;color:#234e52;border-color:#319795;font-size:0.75rem;padding:2px 6px">🎁 赠送 +${bonus}次</span>` : '';
@@ -56,11 +59,11 @@ async function renderUserCard() {
           ${customBadge}
           ${bonusBadge}
         </div>
-        <span class="quota-line">今日剩余试戴 <b>${remain}</b> 次 / 共 ${limit} 次</span>
+        <span class="quota-line">今日剩余试戴 <b>${remain}</b> 次 / 共 ${effective} 次</span>
       </div>
       <span class="chip mint engine-chip" title="首选 AI 引擎">✨ ${engine}</span>
     </div>
-    <div class="quota-track" role="progressbar" aria-label="今日已用额度" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${limit}">
+    <div class="quota-track" role="progressbar" aria-label="今日已用额度" aria-valuenow="${used}" aria-valuemin="0" aria-valuemax="${effective}">
       <div class="quota-bar" style="width:${pct}%"></div>
     </div>
     ${config.announcement ? `<p class="announce">📌 ${config.announcement}</p>` : ''}
@@ -112,7 +115,7 @@ async function renderUserCard() {
     toast(e.target.checked ? '已开启画质增强模式' : '已关闭画质增强模式');
   });
 
-  if (remain === 0 && limit > 0) {
+  if (remain <= 0 && effective > 0) {
     box.querySelector('.quota-line').innerHTML = '今天的试戴额度已用完，明天 0 点自动刷新 🍓';
   }
 }
