@@ -88,6 +88,7 @@ const TABS = [
   { id: 'keys', label: '密钥与引擎' },
   { id: 'users', label: '用户' },
   { id: 'events', label: '生成日志' },
+  { id: 'research', label: '🔬 研究数据' },
   { id: 'settings', label: '站点设置' }
 ];
 
@@ -1348,7 +1349,189 @@ async function viewSettings(view) {
   });
 }
 
-const VIEWS = { overview: viewOverview, personas: viewPersonas, keys: viewKeys, users: viewUsers, events: viewEvents, settings: viewSettings };
+/* ================= 研究数据（用户上传图 / 生成结果 / 提示词） ================= */
+const RESEARCH_CAT_LABEL = { nail: '美甲', hairColor: '发色', hairStyle: '发型' };
+
+async function viewResearch(view) {
+  view.innerHTML = '<div class="card"><p class="desc">加载中…</p></div>';
+
+  let rows = [];
+  let filters = { clientId: '', cat: '', provider: '', ok: '' };
+
+  async function load() {
+    const q = new URLSearchParams();
+    if (filters.clientId) q.set('clientId', filters.clientId);
+    if (filters.cat) q.set('cat', filters.cat);
+    if (filters.provider) q.set('provider', filters.provider);
+    if (filters.ok) q.set('ok', filters.ok);
+    const j = await api('research?' + q.toString()).catch(() => null);
+    return j && j.ok ? (j.research || []) : null;
+  }
+
+  function promptHtml(r) {
+    const prompt = r.prompt || '';
+    const long = prompt.length > 60;
+    return `
+      <div class="prompt ${long ? 'has-more' : ''}" data-prompt-full="${esc(prompt)}">
+        <span class="prompt-text">💬 ${esc(long ? prompt.slice(0, 60) + '…' : prompt) || '（无提示词）'}</span>
+        ${long ? '<button class="prompt-toggle" type="button">展开</button>' : ''}
+      </div>`;
+  }
+
+  function rowHtml(r) {
+    const catLabel = RESEARCH_CAT_LABEL[r.cat] || r.cat || '-';
+    return `
+      <div class="research-row" data-id="${esc(r.id)}">
+        <div class="research-imgs">
+          <div class="research-thumb" data-kind="in" data-id="${esc(r.id)}" title="用户上传图（点击看大图）">
+            ${r.hasIn ? '<img loading="lazy" alt="原图"><span class="thumb-badge">原图</span>' : '<span class="no-img">无图</span>'}
+          </div>
+          <div class="research-thumb" data-kind="out" data-id="${esc(r.id)}" title="生成结果（点击看大图）">
+            ${r.hasOut ? '<img loading="lazy" alt="结果"><span class="thumb-badge">结果</span>' : '<span class="no-img">无图</span>'}
+          </div>
+        </div>
+        <div class="research-meta">
+          <div class="row-top">
+            <span class="t">${esc(fmtTime(r.t))}</span>
+            <span class="status-chip ${r.ok ? 'ok' : 'fail'}">${r.ok ? '✓ 成功' : '✗ 失败'}</span>
+            <span class="chip plain">${esc(catLabel)}</span>
+            <span class="prov">${esc(r.provider || '-')}</span>
+            ${r.ms ? `<span class="num">${Math.round(r.ms / 100) / 10}s</span>` : ''}
+          </div>
+          <div class="row-mid"><span class="mono">ID: ${esc(shortId(r.clientId))}</span></div>
+          ${promptHtml(r)}
+          ${r.err ? `<div class="err" title="${esc(r.err)}">${esc(r.err)}</div>` : ''}
+          <div class="row-actions">
+            <a class="btn btn-sm btn-ghost" data-dl="${esc(r.id)}" data-kind="in" ${r.hasIn ? '' : 'disabled'}>存原图</a>
+            <a class="btn btn-sm btn-ghost" data-dl="${esc(r.id)}" data-kind="out" ${r.hasOut ? '' : 'disabled'}>存结果</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function showLightbox(src, title) {
+    const wrap = document.createElement('div');
+    wrap.className = 'research-lightbox';
+    wrap.innerHTML = `
+      <div class="lb-backdrop"></div>
+      <div class="lb-card">
+        <div class="lb-head"><strong>${esc(title)}</strong><button class="lb-close" type="button">✕</button></div>
+        <img src="${src}" alt="${esc(title)}">
+      </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.querySelector('.lb-close').addEventListener('click', close);
+    wrap.querySelector('.lb-backdrop').addEventListener('click', close);
+  }
+
+  function bind() {
+    view.querySelector('#rf-apply').addEventListener('click', () => {
+      filters.clientId = view.querySelector('#rf-client').value.trim();
+      filters.cat = view.querySelector('#rf-cat').value;
+      filters.provider = view.querySelector('#rf-provider').value.trim();
+      filters.ok = view.querySelector('#rf-ok').value;
+      viewResearch(view);
+    });
+    view.querySelector('#rf-clear').addEventListener('click', async () => {
+      if (!confirm('确定清空全部研究数据（含图片）？此操作不可恢复。')) return;
+      const j = await api('research/clear', { method: 'POST' }).catch(() => null);
+      toast(j && j.ok ? `已清空 ${j.removed || 0} 条` : '清空失败', j && j.ok ? '' : 'err');
+      viewResearch(view);
+    });
+    view.querySelectorAll('.prompt-toggle').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const box = btn.closest('.prompt');
+        const txt = box.querySelector('.prompt-text');
+        const full = box.dataset.promptFull || '';
+        const isShort = (txt.textContent || '').length <= 63;
+        txt.textContent = isShort ? full : (full.slice(0, 60) + '…');
+        btn.textContent = isShort ? '收起' : '展开';
+      });
+    });
+    view.querySelectorAll('[data-dl]').forEach(a => a.addEventListener('click', async e => {
+      e.preventDefault();
+      if (a.hasAttribute('disabled')) return;
+      const { dl: id, kind } = a.dataset;
+      const j = await api(`research/${id}/${kind}`).catch(() => null);
+      if (!j || !j.ok || !j.data) { toast('图片获取失败', 'err'); return; }
+      const link = document.createElement('a');
+      link.href = j.data;
+      link.download = `${kind === 'in' ? 'input' : 'output'}-${id}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }));
+    view.querySelectorAll('.research-thumb[data-id]').forEach(el => {
+      el.addEventListener('click', async () => {
+        const { id, kind } = el.dataset;
+        const j = await api(`research/${id}/${kind}`).catch(() => null);
+        if (!j || !j.ok || !j.data) { toast('图片获取失败', 'err'); return; }
+        showLightbox(j.data, kind === 'in' ? '用户上传图' : '生成结果');
+      });
+    });
+  }
+
+  /* 缩略图惰性加载（IntersectionObserver），降低一次拉太多大图的开销 */
+  function lazyThumbs() {
+    const imgs = [...view.querySelectorAll('.research-thumb img')];
+    const load = el => {
+      if (el.dataset.loaded) return;
+      el.dataset.loaded = '1';
+      const row = el.closest('.research-thumb');
+      const { id, kind } = row.dataset;
+      api(`research/${id}/${kind}`)
+        .then(j => { if (j && j.ok && j.data) el.src = j.data; })
+        .catch(() => {});
+    };
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(en => {
+          if (en.isIntersecting) { load(en.target); io.unobserve(en.target); }
+        });
+      }, { rootMargin: '300px' });
+      imgs.forEach(img => io.observe(img));
+    } else {
+      imgs.forEach(load);
+    }
+  }
+
+  rows = await load();
+  if (!rows) { view.innerHTML = '<div class="card"><p class="desc">加载失败，刷新重试</p></div>'; return; }
+
+  const listHtml = rows.length
+    ? rows.map(rowHtml).join('')
+    : '<p class="desc">还没有研究数据——用户每次生成会自动记录上传图、结果与提示词。</p>';
+
+  view.innerHTML = `
+    <div class="card">
+      <h2>🔬 研究数据</h2>
+      <p class="desc">自动记录每次生成的用户上传图、AI 结果与提示词（保留最近 ${rows.length} 条，上限 100），用于算法研究。</p>
+      <div class="research-filters">
+        <input id="rf-client" placeholder="用户 ID" value="${esc(filters.clientId)}">
+        <select id="rf-cat">
+          <option value="">全部分类</option>
+          <option value="nail" ${filters.cat === 'nail' ? 'selected' : ''}>美甲</option>
+          <option value="hairColor" ${filters.cat === 'hairColor' ? 'selected' : ''}>发色</option>
+          <option value="hairStyle" ${filters.cat === 'hairStyle' ? 'selected' : ''}>发型</option>
+        </select>
+        <input id="rf-provider" placeholder="引擎" value="${esc(filters.provider)}">
+        <select id="rf-ok">
+          <option value="">全部状态</option>
+          <option value="1" ${filters.ok === '1' ? 'selected' : ''}>成功</option>
+          <option value="0" ${filters.ok === '0' ? 'selected' : ''}>失败</option>
+        </select>
+        <button class="btn btn-sm btn-primary" id="rf-apply">筛选</button>
+        <button class="btn btn-sm btn-ghost danger" id="rf-clear">清空全部</button>
+      </div>
+      <div class="research-list">${listHtml}</div>
+    </div>`;
+
+  bind();
+  lazyThumbs();
+}
+
+const VIEWS = { overview: viewOverview, personas: viewPersonas, keys: viewKeys, users: viewUsers, events: viewEvents, research: viewResearch, settings: viewSettings };
 
 /* ---------- 启动 ---------- */
 window.addEventListener('hashchange', () => { if (getToken()) renderApp(); });

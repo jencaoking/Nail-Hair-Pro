@@ -10,12 +10,13 @@ import { getClientId } from '../store/settings.js';
  * @param {Blob} opts.imageBlob 输入照片（JPEG）
  * @param {string} opts.prompt 试戴 prompt
  * @param {number} opts.width / opts.height 期望输出尺寸
+ * @param {string} [opts.cat] 分类（nail / hairColor / hairStyle），供服务端研究数据记录
  * @param {AbortSignal} [opts.signal] 用户取消
  * @param {function} [opts.onEngine] ({index,total,provider}) 引擎进度回调
  * @param {string} [opts.phash] 输入图片感知哈希（16 位 hex，用于服务端缓存去重）
  * @returns {Promise<{blob:Blob, provider:{id:string,label:string}}>}
  */
-export async function tryOn({ imageBlob, prompt, width, height, signal, onEngine, phash }) {
+export async function tryOn({ imageBlob, prompt, width, height, cat, signal, onEngine, phash }) {
   const b64 = await blobToBase64(imageBlob);
   if (onEngine) onEngine({ index: 1, total: 1, provider: { id: 'server', label: '魔法引擎' } });
 
@@ -31,6 +32,7 @@ export async function tryOn({ imageBlob, prompt, width, height, signal, onEngine
         prompt,
         width,
         height,
+        cat: cat || null,
         phash: phash || null
       })
     });

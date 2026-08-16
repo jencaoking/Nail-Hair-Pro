@@ -515,6 +515,7 @@ export function createTryOnPage(opts) {
           prompt,
           width,
           height,
+          cat: catKey,
           phash: photoPhash
         });
         await updateHistory(recId, { afterBlob: blob, provider: provider.label, status: 'done' });

@@ -59,8 +59,14 @@ const DEFAULTS = () => ({
     imgbb: process.env.IMGBB_API_KEY || ''
   },
   users: {},                                       // clientId → 记录
-  stats: { total: 0, ok: 0, fail: 0, byProvider: {}, events: [] }
+  stats: { total: 0, ok: 0, fail: 0, byProvider: {}, events: [] },
+  research: []                                     // 研究数据：{id, t, clientId, cat, prompt, provider, ok, ms, err, hasIn, hasOut}
 });
+
+/* 研究数据：元数据环形缓冲上限；图片不塞进主数据 blob（避免 KV 单 key 超限），
+ * 本地存 server/research/{id}.{in|out}.b64，Vercel 存独立 KV key nhi:research:{id}:{in|out} */
+const RESEARCH_MAX = 100;
+const RESEARCH_DIR = path.join(DIR, 'research');
 
 let cache = null;
 /* 数据来源：'kv'（KV 读取成功，可安全写回）| 'file'（本地文件）| 'defaults'（读取失败，内存降级态）。
@@ -463,6 +469,141 @@ export function recordEvent({ clientId, provider, ok, ms, err }) {
   }
   d.stats.events.unshift({ t: Date.now(), clientId, provider, ok, ms: ms || 0, err: err || '' });
   if (d.stats.events.length > 200) d.stats.events.length = 200;
+}
+
+/* ---------- 研究数据（算法研究用：用户上传图 / 生成结果 / 提示词） ----------
+ * 元数据（含提示词）进主 blob 环形缓冲（RESEARCH_MAX 条）；
+ * 图片独立存放，避免把大 base64 塞进主 KV 单 key（Upstash 单 value 约 1MB 上限）：
+ *   - 本地：server/research/{id}.{in|out}.b64
+ *   - Vercel：KV key nhi:research:{id}:{in|out}
+ * 图片超限时仅保留元数据（hasIn/hasOut=false），保证管理后台可用而不撑爆 KV。 */
+const RESEARCH_IMG_MAX_B64 = 750 * 1024;   // 单张图片 base64 上限（约 560KB 图），超限不存图只存元数据
+
+async function kvKeyGet(key) {
+  const res = await fetch(`${KV_URL}/get/${key}`, {
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}` },
+    signal: AbortSignal.timeout(KV_TIMEOUT)
+  });
+  if (!res.ok) throw new Error('KV get HTTP ' + res.status);
+  const j = await res.json().catch(() => null);
+  return j && typeof j.result === 'string' ? j.result : null;
+}
+
+async function kvKeySet(key, val) {
+  const res = await fetch(`${KV_URL}/pipeline`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([['SET', key, val]]),
+    signal: AbortSignal.timeout(KV_TIMEOUT)
+  });
+  if (!res.ok) throw new Error('KV set HTTP ' + res.status);
+}
+
+async function kvKeyDel(key) {
+  const res = await fetch(`${KV_URL}/pipeline`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([['DEL', key]]),
+    signal: AbortSignal.timeout(KV_TIMEOUT)
+  });
+  if (!res.ok) throw new Error('KV del HTTP ' + res.status);
+}
+
+const researchKey = (id, kind) => `nhi:research:${id}:${kind}`;
+const researchFile = (id, kind) => path.join(RESEARCH_DIR, `${id}.${kind}.b64`);
+
+function researchStoreImage(id, kind, b64) {
+  if (!b64 || b64.length > RESEARCH_IMG_MAX_B64) return false;
+  if (IS_VERCEL) {
+    if (!KV_URL || !KV_TOKEN) return false;
+    const p = kvKeySet(researchKey(id, kind), b64)
+      .catch(err => console.error('[store] 研究图 KV 写入失败', err.message))
+      .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
+    pendingWrites.push(p);
+    return true;
+  }
+  try {
+    fs.mkdirSync(RESEARCH_DIR, { recursive: true });
+    fs.writeFileSync(researchFile(id, kind), b64, 'utf8');
+    return true;
+  } catch { return false; }
+}
+
+function researchRemoveImage(id, kind) {
+  if (IS_VERCEL) {
+    if (!KV_URL || !KV_TOKEN) return;
+    const p = kvKeyDel(researchKey(id, kind))
+      .catch(() => {})
+      .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
+    pendingWrites.push(p);
+    return;
+  }
+  try { fs.unlinkSync(researchFile(id, kind)); } catch { /* 忽略 */ }
+}
+
+/* 记录一次生成（成功/失败都记）：元数据进环形缓冲，图片独立存储 */
+export function recordResearch({ clientId, cat, prompt, provider, ok, ms, err, inputB64, outputB64 }) {
+  const d = load();
+  const id = crypto.randomUUID().slice(0, 8) + Date.now().toString(36);
+  const rec = {
+    id,
+    t: Date.now(),
+    clientId: clientId || '',
+    cat: cat || '',
+    prompt: String(prompt || '').slice(0, 500),
+    provider: provider || '',
+    ok: !!ok,
+    ms: ms || 0,
+    err: err || '',
+    hasIn: researchStoreImage(id, 'in', inputB64),
+    hasOut: researchStoreImage(id, 'out', outputB64)
+  };
+  d.research.unshift(rec);
+  const removed = d.research.slice(RESEARCH_MAX);
+  if (removed.length) {
+    d.research.length = RESEARCH_MAX;
+    for (const r of removed) {
+      if (r.hasIn) researchRemoveImage(r.id, 'in');
+      if (r.hasOut) researchRemoveImage(r.id, 'out');
+    }
+  }
+  saveDebounced();
+  return rec;
+}
+
+/* 列表（管理后台）：可筛选 clientId / cat / provider / ok */
+export function listResearch({ limit = 100, clientId = '', cat = '', provider = '', ok = null } = {}) {
+  const d = load();
+  let list = d.research || [];
+  if (clientId) list = list.filter(r => r.clientId === clientId);
+  if (cat) list = list.filter(r => r.cat === cat);
+  if (provider) list = list.filter(r => r.provider === provider);
+  if (ok === true || ok === false) list = list.filter(r => !!r.ok === ok);
+  return list.slice(0, Math.max(1, Math.min(200, Number(limit) || 100)));
+}
+
+/* 读单张研究图片（返回 data URL 前缀之外的部分 base64；无则 null） */
+export async function getResearchImage(id, kind) {
+  if (kind !== 'in' && kind !== 'out') return null;
+  if (IS_VERCEL) {
+    if (!KV_URL || !KV_TOKEN) return null;
+    try { return await kvKeyGet(researchKey(id, kind)); } catch { return null; }
+  }
+  try { return fs.readFileSync(researchFile(id, kind), 'utf8'); } catch { return null; }
+}
+
+/* 清空研究数据（元数据 + 图片） */
+export async function clearResearch() {
+  const d = load();
+  const old = d.research || [];
+  d.research = [];
+  for (const r of old) {
+    if (r.hasIn) researchRemoveImage(r.id, 'in');
+    if (r.hasOut) researchRemoveImage(r.id, 'out');
+  }
+  save();
+  await flush().catch(() => {});
+  return old.length;
 }
 
 /* 密钥脱敏：只告诉后台“配了什么”，不回传原文 */

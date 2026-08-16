@@ -234,6 +234,7 @@ async function handleTryon(req, res) {
     if (hit.hit) {
       store.recordEvent({ clientId, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, err: hit.exact ? 'cache-hit' : `cache-fuzzy(${hit.dist})` });
       store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
+      store.recordResearch({ clientId, cat: body.cat, prompt, provider: hit.entry.provider || 'cache', ok: true, ms: Date.now() - t0, inputB64: img.b64, outputB64: hit.entry.image });
       store.saveDebounced();
       const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
       return json(res, 200, {
@@ -264,6 +265,7 @@ async function handleTryon(req, res) {
     }
     store.touchUser(clientId, { count: 1, ip, userAgent: ua, device: dev.summary });
     store.recordEvent({ clientId, provider: provider.id, ok: true, ms: Date.now() - t0 });
+    store.recordResearch({ clientId, cat: body.cat, prompt, provider: provider.id, ok: true, ms: Date.now() - t0, inputB64: img.b64, outputB64: b64 });
     store.saveDebounced();
     const updatedQuota = store.getUserQuotaInfo(store.getUser(clientId), d.settings.dailyLimit);
     return json(res, 200, {
@@ -277,6 +279,7 @@ async function handleTryon(req, res) {
   } catch (err) {
     const e = normalizeError(err);
     store.recordEvent({ clientId, provider: providerUsed, ok: false, ms: Date.now() - t0, err: e.message });
+    store.recordResearch({ clientId, cat: body.cat, prompt, provider: providerUsed, ok: false, ms: Date.now() - t0, err: e.message, inputB64: img.b64 });
     store.saveDebounced();
     const code = e.type === 'Content' ? 422 : e.type === 'Quota' ? 503 : 502;
     return json(res, code, { ok: false, error: { type: e.type, message: e.message } });
@@ -606,6 +609,30 @@ async function handleAdmin(req, res, url) {
     if (!ok) return json(res, 400, { ok: false, message: '当前口令不对，或新口令太短（至少 6 位）' });
     // 口令变更后 salt/hash 改变，由 salt 派生的会话密钥随之改变，旧 token 自动全部失效
     return json(res, 200, { ok: true, message: '口令已更新，请重新登录', relogin: true });
+  }
+
+  /* 研究数据：列表（筛选）/ 单图 / 清空 */
+  if (req.method === 'GET' && op === 'research') {
+    const q = url.searchParams;
+    const list = store.listResearch({
+      limit: q.get('limit') || 100,
+      clientId: q.get('clientId') || '',
+      cat: q.get('cat') || '',
+      provider: q.get('provider') || '',
+      ok: q.get('ok') === '1' ? true : q.get('ok') === '0' ? false : null
+    });
+    return json(res, 200, { ok: true, research: list });
+  }
+  const imgMatch = /^research\/([A-Za-z0-9_-]+)\/(in|out)$/.exec(op);
+  if (req.method === 'GET' && imgMatch) {
+    const [, id, kind] = imgMatch;
+    const b64 = await store.getResearchImage(id, kind);
+    if (!b64) return json(res, 404, { ok: false, message: '图片不存在' });
+    return json(res, 200, { ok: true, id, kind, data: `data:image/jpeg;base64,${b64}` });
+  }
+  if (req.method === 'POST' && op === 'research/clear') {
+    const removed = await store.clearResearch();
+    return json(res, 200, { ok: true, removed });
   }
 
   return json(res, 404, { ok: false, message: '未知接口' });
