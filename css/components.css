@@ -532,6 +532,23 @@
   color: #ffffff;
 }
 
+/* 对比视图外层容器（.cmp-wrapper）与视图区（.cmp-view-area）
+ * 此前缺失定义导致容器高度塌陷为 0（内部图片为 absolute 定位不撑开父级），
+ * 弹窗能开但图片完全不可见，表现即「点不开图片」。 */
+.cmp-wrapper {
+  width: 100%;
+}
+.cmp-view-area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #1a1a1a;
+  border-radius: var(--r-m);
+  border: 4px solid var(--border-ink);
+  box-shadow: var(--shadow-comic);
+}
+
 /* 对比视图模式工具栏 */
 .cmp-mode-bar {
   display: flex;
