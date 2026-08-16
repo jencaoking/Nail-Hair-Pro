@@ -547,11 +547,11 @@ export function createTryOnPage(opts) {
       return;
     }
 
-    // 2) 立即回到「我的」页，AI 在后台继续生成
-    toast('✨ 已提交生成，完成后自动出现在「我的」记录里');
-    go('mine');
+    // 2) 留在当前页：结果区原地展示生成中状态，AI 在后台继续生成
+    toast('✨ 已提交生成，AI 正在处理…');
+    renderLoading();
 
-    // 3) 后台生成：不阻塞页面，完成后更新占位记录；失败则标记 error
+    // 3) 后台生成：不阻塞页面，完成后原地渲染结果；失败则原地显示错误；历史记录照常更新
     bgBusy = true;
     (async () => {
       try {
@@ -567,11 +567,13 @@ export function createTryOnPage(opts) {
         await updateHistory(recId, { afterBlob: blob, provider: provider.label, status: 'done' });
         trackBehavior({ type: 'tryon_generate', cat: catKey, inspId: selectedInspId, tags: insp ? insp.tags : [] });
         bumpUsage();
+        renderResult(blob, provider);
         toast('试戴完成！已保存到「我的」记录', 'ok');
       } catch (err) {
         const e = normalizeError(err);
         const copy = copyFor(e);
         await updateHistory(recId, { status: 'error', error: e.message || copy.msg }).catch(() => {});
+        renderError(e);
         toast(copy.msg, 'err');
       } finally {
         bgBusy = false;
