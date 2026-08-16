@@ -111,6 +111,7 @@ function renderApp() {
       </div>
     </header>
     <div class="layout">
+      <h1 class="page-title">${TABS.find(t => t.id === tab).label}</h1>
       <nav class="sidenav" aria-label="后台导航">
         ${TABS.map(t => `<a href="#${t.id}" class="${t.id === tab ? 'active' : ''}">${t.label}</a>`).join('')}
       </nav>

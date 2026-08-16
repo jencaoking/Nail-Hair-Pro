@@ -125,7 +125,10 @@ a:hover {
 
 main {
   padding-top: calc(var(--header-h) + var(--sp-3));
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + var(--sp-4));
+  /* 底部预留 = 底部导航高度 + 安全区 + 间距 + 12px 余量，
+     抵消 tabbar 的 border-top(4px) 与 padding-bottom(6px) 造成的实际高度高于 --tabbar-h 的差异，
+     避免长页面滚动到底时底部导航遮挡内容（P3-6） */
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + var(--sp-4) + 12px);
 }
 
 /* 漫画风滚动条 */
