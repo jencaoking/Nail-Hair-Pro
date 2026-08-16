@@ -216,7 +216,12 @@ export function createTryOnPage(opts) {
       if (act === 'clear-insp') clearSelectedInsp();
       if (act === 'sample-photo') await loadSamplePhoto();
     } catch (err) {
-      toast(explainCameraError(err), 'err');
+      // 只有相机类操作才用相机错误解释；生成/上传等操作应显示真实原因，避免误报「相机出了点状况」
+      const cameraActs = ['camera', 'shutter', 'flip'];
+      const msg = cameraActs.includes(act)
+        ? explainCameraError(err)
+        : (err && (err.message || err.type)) || '操作失败，请重试';
+      toast(msg, 'err');
     }
   });
 
@@ -289,7 +294,13 @@ export function createTryOnPage(opts) {
   }
 
   async function takeShot() {
-    let blob = await camera.capture();
+    let blob;
+    try {
+      blob = await camera.capture();
+    } catch (e) {
+      toast(explainCameraError(e), 'err');
+      return;
+    }
     let phash = null;
     stopCameraUI();
     try {
@@ -330,7 +341,12 @@ export function createTryOnPage(opts) {
     structurePromise = null;
     updateDetectBadge('detecting', subject);
 
-    structurePromise = detectStructure(blob, subject)
+    // 加超时兜底：MediaPipe 模型加载/推理若超时（CDN 慢、模型下载慢），静默降级为无结构信息，
+    // 避免「识别中」徽标永久卡住，也避免生成流程被检测拖住
+    structurePromise = Promise.race([
+      detectStructure(blob, subject),
+      delay(5000).then(() => null)
+    ])
       .then(structure => {
         photoStructure = structure;
         updateDetectBadge(structure ? 'done' : 'none', subject, structure);
