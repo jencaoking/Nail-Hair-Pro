@@ -83,13 +83,13 @@ function renderLogin(errMsg = '') {
 
 /* ================= 主框架 ================= */
 const TABS = [
-  { id: 'overview', label: '概览' },
+  { id: 'overview', label: '📊 概览' },
   { id: 'personas', label: '🎯 用户画像与推荐算法' },
-  { id: 'keys', label: '密钥与引擎' },
-  { id: 'users', label: '用户' },
-  { id: 'events', label: '生成日志' },
+  { id: 'keys', label: '🔑 密钥与引擎' },
+  { id: 'users', label: '👥 用户' },
+  { id: 'events', label: '📋 生成日志' },
   { id: 'research', label: '🔬 研究数据' },
-  { id: 'settings', label: '站点设置' }
+  { id: 'settings', label: '⚙️ 站点设置' }
 ];
 
 function renderApp() {
@@ -142,7 +142,7 @@ async function viewOverview(view) {
       <div class="head">
         <strong>${esc(e.label)}</strong>
         ${e.primary ? '<span class="chip gold">首选</span>' : ''}
-        ${e.ready ? '<span class="chip mint">可用</span>' : '<span class="chip plain">未启用</span>'}
+        ${e.ready ? '<span class="chip mint">可用</span>' : '<span class="chip disabled">未启用</span>'}
         ${e.requiresKey ? '' : '<span class="chip lav">免密钥</span>'}
         <a href="${esc(e.docsUrl)}" target="_blank" rel="noopener" style="font-size:.72rem;margin-left:auto">文档 ↗</a>
       </div>
@@ -211,7 +211,7 @@ async function viewKeys(view) {
       <div class="engine-item" data-engine-card="${e.id}">
         <div class="head">
           <strong>${esc(e.label)}</strong>
-          ${e.ready ? '<span class="chip mint">已配置</span>' : '<span class="chip plain">未配置</span>'}
+          ${e.ready ? '<span class="chip mint">已配置</span>' : '<span class="chip disabled">未配置</span>'}
           ${e.primary ? '<span class="chip gold">首选</span>' : ''}
         </div>
         ${fields}
@@ -948,7 +948,7 @@ async function viewPersonas(view) {
       </div>
       <div class="stat-card">
         <div class="label">算法策略模式</div>
-        <div class="val" style="font-size:1.3rem;line-height:1.2">${currentSettings.strategyPreset === 'hyper_personal' ? '深度个性化' : currentSettings.strategyPreset === 'trending' ? '爆款导向' : currentSettings.strategyPreset === 'discover' ? '探索发现' : '均衡推荐'}</div>
+        <div class="val" style="font-size:1.3rem;line-height:1.2">${currentSettings.preset === 'hyper_personal' ? '深度个性化' : currentSettings.preset === 'trending' ? '爆款导向' : currentSettings.preset === 'discover' ? '探索发现' : '均衡推荐'}</div>
       </div>
       <div class="stat-card">
         <div class="label">全站最热画像客群</div>
@@ -1036,10 +1036,10 @@ async function viewPersonas(view) {
       <p class="desc">调整推荐评分公式中各因子权重，保存后全站推荐流与首页个性化分区将即时生效。</p>
 
       <div class="algo-preset-group">
-        <button type="button" class="algo-preset-chip ${currentSettings.strategyPreset === 'balanced' ? 'active' : ''}" data-preset="balanced">⚖️ 均衡智能推荐 (默认)</button>
-        <button type="button" class="algo-preset-chip ${currentSettings.strategyPreset === 'hyper_personal' ? 'active' : ''}" data-preset="hyper_personal">🎯 深度个性化模式 (高粘性)</button>
-        <button type="button" class="algo-preset-chip ${currentSettings.strategyPreset === 'trending' ? 'active' : ''}" data-preset="trending">🔥 流行爆款导向 (促试戴)</button>
-        <button type="button" class="algo-preset-chip ${currentSettings.strategyPreset === 'discover' ? 'active' : ''}" data-preset="discover">🧭 灵感探索发现 (推新品)</button>
+        <button type="button" class="algo-preset-chip ${currentSettings.preset === 'balanced' ? 'active' : ''}" data-preset="balanced">⚖️ 均衡智能推荐 (默认)</button>
+        <button type="button" class="algo-preset-chip ${currentSettings.preset === 'hyper_personal' ? 'active' : ''}" data-preset="hyper_personal">🎯 深度个性化模式 (高粘性)</button>
+        <button type="button" class="algo-preset-chip ${currentSettings.preset === 'trending' ? 'active' : ''}" data-preset="trending">🔥 流行爆款导向 (促试戴)</button>
+        <button type="button" class="algo-preset-chip ${currentSettings.preset === 'discover' ? 'active' : ''}" data-preset="discover">🧭 灵感探索发现 (推新品)</button>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px">
@@ -1179,7 +1179,7 @@ async function viewPersonas(view) {
       exploreWeight: Number(wExplore.value),
       decayHalfLifeDays: Number(wHalfLife.value),
       categoryBoost: Number(wCatBoost.value),
-      strategyPreset: activePreset
+      preset: activePreset
     };
     const res = await api('recommendation-settings', { method: 'POST', body }).catch(e => ({ ok: false, message: e.message }));
     if (res && res.ok) {

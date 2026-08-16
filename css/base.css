@@ -93,6 +93,28 @@ a:hover {
   border: 0;
 }
 
+/* 跳转主内容链接：平时隐藏，键盘聚焦时显示（P3-1） */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 12px;
+  z-index: 1000;
+  padding: 10px 18px;
+  background: var(--yellow);
+  color: #1a1a1a;
+  border: 3px solid var(--border-ink);
+  border-radius: var(--r-s);
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-comic);
+  transition: top 0.15s ease;
+}
+.skip-link:focus {
+  top: 12px;
+  color: #1a1a1a;
+}
+
 /* 容器与版心 */
 .container {
   max-width: 1140px;

@@ -528,8 +528,9 @@ async function handleAdmin(req, res, url) {
     }
     const aggregate = aggregateUserPersonas(d.users, recSettings, personaCache);
     // 只返回前端需要的精简字段（不内嵌完整 persona 的 allTagScores/colorAffinities 等大对象），
-    // 否则用户多时响应体可达数 MB，前端解析/渲染卡死
-    // 键名/字段对齐 admin.js viewPersonas：userList[]，每项含 clientId / shortId / personaName / personaBadge / eventCount
+    // 否则用户多时响应体可达数 MB，前端解析/渲染卡死。
+    // 键名/字段必须与 admin.js viewPersonas 解构一致：overview / clusterDistribution /
+    // topAffinityTags / categoryBreakdown / userList / presets / currentSettings。
     const userList = Object.entries(d.users).map(([clientId, u]) => {
       const persona = personaCache[clientId];
       return {
@@ -548,8 +549,35 @@ async function handleAdmin(req, res, url) {
       };
     }).sort((a, b) => (b.eventCount || 0) - (a.eventCount || 0));
 
+    // 组装前端期望的顶层字段（此前返回 aggregate 字段名与前端解构不一致，导致画像页渲染抛错卡死）
+    const totalUsers = aggregate.totalUsers || 1;
+    const clusterDistribution = (aggregate.personaDistribution || []).map(p => ({
+      badge: p.badge,
+      name: p.name,
+      userCount: p.count,
+      percentage: Math.round((p.count / totalUsers) * 100),
+      description: p.desc || p.name,
+      coreTags: p.coreTags || []
+    }));
+    const catSum = (aggregate.catDistribution?.nail || 0)
+      + (aggregate.catDistribution?.hairColor || 0)
+      + (aggregate.catDistribution?.hairStyle || 0);
+    const catPct = v => catSum ? Math.round((v / catSum) * 100) : 0;
+
     return json(res, 200, {
       ok: true,
+      overview: {
+        totalLearnedUsers: aggregate.activeLearnedUsers || 0,
+        avgConfidence: aggregate.avgConfidence || 0,
+        dominantPersona: clusterDistribution[0]?.name || '灵感初探'
+      },
+      clusterDistribution,
+      topAffinityTags: aggregate.topTagsHeat || [],
+      categoryBreakdown: {
+        nail: { percentage: catPct(aggregate.catDistribution?.nail || 0) },
+        hairColor: { percentage: catPct(aggregate.catDistribution?.hairColor || 0) },
+        hairStyle: { percentage: catPct(aggregate.catDistribution?.hairStyle || 0) }
+      },
       aggregate,
       userList,
       presets: REC_PRESETS,

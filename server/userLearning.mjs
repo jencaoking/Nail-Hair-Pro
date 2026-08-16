@@ -21,6 +21,7 @@ export const DEFAULT_REC_SETTINGS = {
 /* 预设方案 */
 export const REC_PRESETS = {
   balanced: {
+    preset: 'balanced',
     label: '均衡智能推荐',
     desc: '兼顾个性化画像、爆款热度与风格探索，适合大多数用户',
     personalWeight: 0.45,
@@ -30,6 +31,7 @@ export const REC_PRESETS = {
     decayHalfLifeDays: 7
   },
   hyper_personal: {
+    preset: 'hyper_personal',
     label: '深度个性化',
     desc: '深度聚焦用户历史偏好风格与色系，推荐高度契合的同类款式',
     personalWeight: 0.70,
@@ -39,6 +41,7 @@ export const REC_PRESETS = {
     decayHalfLifeDays: 14
   },
   trending: {
+    preset: 'trending',
     label: '流行爆款导向',
     desc: '以全站热门、高点赞与高试戴率款式为主，降低小众探索',
     personalWeight: 0.20,
@@ -48,6 +51,7 @@ export const REC_PRESETS = {
     decayHalfLifeDays: 5
   },
   discover: {
+    preset: 'discover',
     label: '灵感探索发现',
     desc: '主动推送用户未尝试过的冷门宝藏与新品，激发尝试新风格',
     personalWeight: 0.25,
@@ -381,6 +385,8 @@ export function aggregateUserPersonas(userRecords = {}, settings = DEFAULT_REC_S
       type: p.type,
       name: p.name,
       badge: p.badge,
+      desc: p.desc,
+      coreTags: p.matchTags || [],
       count: 0
     };
   }
@@ -388,6 +394,8 @@ export function aggregateUserPersonas(userRecords = {}, settings = DEFAULT_REC_S
     type: 'explorer',
     name: '灵感探索新手',
     badge: '🌱 灵感初探',
+    desc: '冷启动状态，将依托热门与探索因子进行智能冷启动推荐',
+    coreTags: [],
     count: 0
   };
 

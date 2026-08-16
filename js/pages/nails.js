@@ -162,6 +162,15 @@ export function createTryOnPage(opts) {
   const hide = el => { if (!el) return; el.hidden = true;  el.classList.add('is-hidden'); };
 
   /* ---------- 生成引擎选择器：拉取服务端已配置引擎，用户可选，持久化到 settings ---------- */
+  /* 已知引擎的通俗别名：把技术化的引擎名换成普通用户能看懂的描述（P3-2） */
+  const FRIENDLY_ENGINE_LABEL = {
+    pollinations: '免费智能引擎（快）',
+    agnes: '高清智能引擎（推荐）',
+    gemini: '谷歌引擎（均衡）',
+    siliconflow: '硅基流动引擎',
+    cloudflare: 'Cloudflare 引擎',
+    huggingface: '社区开源引擎'
+  };
   async function initEnginePicker() {
     if (!enginePickerRow || !engineSelect) return;
     const config = await fetchConfig().catch(() => null);
@@ -172,7 +181,7 @@ export function createTryOnPage(opts) {
     const saved = getEngine();
     const cur = engines.some(e => e.id === saved) ? saved : 'auto';
     engineSelect.innerHTML = '<option value="auto">自动（推荐）</option>' +
-      engines.map(e => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('');
+      engines.map(e => `<option value="${esc(e.id)}">${esc(FRIENDLY_ENGINE_LABEL[e.id] || e.label)}</option>`).join('');
     engineSelect.value = cur;
     engineSelect.addEventListener('change', () => {
       setSettings({ engine: engineSelect.value });
@@ -592,9 +601,10 @@ export function createTryOnPage(opts) {
   /* ---------- 结果状态渲染 ---------- */
   function renderIdle() {
     resultEl.innerHTML = `
-      <div class="result-state">
+      <div class="result-state result-placeholder">
         ${HEART_SVG}
-        <p class="cap">拍照或选择灵感款式后<br>在此处实时预览 AI 试戴效果与高清对比</p>
+        <p class="cap">上传照片并选择款式后<br>AI 试戴效果会实时显示在这里</p>
+        <p class="sub-hint">支持滑块对比 · 左右并排 · 长按看原图</p>
       </div>`;
   }
 

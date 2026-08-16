@@ -247,14 +247,15 @@
 /* ---- 首页 Hero & 漫画面板入口 ---- */
 .hero {
   text-align: center;
-  padding: var(--sp-4) 0 var(--sp-3);
+  /* 增加纵向留白，缓解「标签 + 口号 + 气泡」堆叠拥挤（P2-1） */
+  padding: var(--sp-5) 0 var(--sp-4);
 }
 .hero-badge-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: var(--sp-2);
+  gap: 10px;
+  margin-bottom: var(--sp-3);
   flex-wrap: wrap;
 }
 .hero h1 {
@@ -263,6 +264,7 @@
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  margin-bottom: var(--sp-2);
 }
 .hero h1 .hl {
   color: var(--primary);
@@ -325,9 +327,9 @@
 }
 .entry-card .ic {
   position: absolute;
-  right: -10px;
-  bottom: -12px;
-  opacity: 0.85;
+  right: 14px;
+  bottom: 12px;
+  opacity: 0.75;
   transition: transform 0.15s ease;
   pointer-events: none;
 }
@@ -656,6 +658,7 @@
   margin-top: var(--sp-3);
   display: flex;
   gap: var(--sp-2);
+  justify-content: center;   /* 生成按钮居中，视觉重心对齐（P2-4） */
 }
 .engine-picker-row {
   margin-top: var(--sp-3);
@@ -691,6 +694,18 @@
   justify-content: center;
   padding: var(--sp-4);
   text-align: center;
+}
+/* 空结果占位：虚线引导框，让「未上传照片」的预览区不再显得空白（P2-3） */
+.result-state.result-placeholder {
+  border: 3px dashed var(--border-ink);
+  border-radius: var(--r-m);
+  background: var(--bg-subtle);
+}
+.result-state .sub-hint {
+  margin-top: var(--sp-1);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
 }
 .result-state .cap {
   margin-top: var(--sp-3);

@@ -26,6 +26,8 @@ body {
   background-attachment: fixed;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
+  /* 防止顶栏/表格在窄屏下把整个页面撑出横向滚动（P1-1） */
+  overflow-x: hidden;
 }
 
 a {
@@ -82,6 +84,32 @@ button, input, select, textarea {
   box-shadow: 1px 1px 0px 0px rgba(26, 26, 26, 1);
 }
 
+/* 窄屏（后台移动端）：顶栏压缩，避免 brand + 用户端/退出按钮把页面撑破（P1-1） */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 6px;
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    flex-wrap: wrap;
+  }
+  .topbar .brand {
+    font-size: 0.95rem;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .topbar .brand .brand-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .brand .sub { display: none; }
+  .topbar .spacer { display: none; }
+  .topbar-actions { flex-shrink: 1; }
+  .topbar a.site-link { font-size: 0.72rem; padding: 5px 8px; }
+  .topbar button.logout { font-size: 0.72rem; padding: 5px 8px; }
+}
+
 .topbar .spacer {
   flex: 1;
 }
@@ -100,8 +128,9 @@ button, input, select, textarea {
   padding: 6px 12px;
   border-radius: var(--r-s);
   border: 3px solid var(--border-ink);
-  background: var(--yellow);
-  color: var(--ink);
+  /* 用白色 surface 替代黄色：与暖黄纸质背景拉开对比，入口更醒目（P3-3） */
+  background: var(--surface);
+  color: var(--ink-strong);
   box-shadow: 2px 2px 0px 0px rgba(26, 26, 26, 1);
   white-space: nowrap;
   display: inline-flex;
@@ -110,7 +139,7 @@ button, input, select, textarea {
 }
 
 .topbar a.site-link:hover {
-  background: var(--surface);
+  background: var(--yellow);
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0px 0px rgba(26, 26, 26, 1);
 }
@@ -205,8 +234,8 @@ button, input, select, textarea {
 .sidenav a.active {
   background: var(--yellow);
   color: #1a1a1a;
-  box-shadow: 3px 3px 0px 0px rgba(26, 26, 26, 1);
-  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px 0px rgba(26, 26, 26, 1);
+  transform: none;
 }
 
 /* ---- 卡片容器 ---- */
@@ -327,6 +356,9 @@ th {
   white-space: nowrap;
   text-transform: uppercase;
   border-bottom: 3px solid var(--border-ink);
+  /* 收紧表头内边距，让列内容有更多展示空间，缓解「表头稀疏、内容局促」（P2-7） */
+  padding: 8px 10px;
+  line-height: 1.3;
 }
 
 tr:last-child td {
@@ -540,6 +572,14 @@ textarea:focus {
 .chip.lav {
   background: var(--blue);
   color: #ffffff;
+}
+
+/* 引擎「未启用」状态：虚线边框 + 弱化色，与「可用」的实心绿形成清晰对比（P2-5） */
+.chip.disabled {
+  background: var(--bg-subtle);
+  color: var(--muted);
+  border-style: dashed;
+  box-shadow: none;
 }
 
 .verify-result {
@@ -804,6 +844,14 @@ textarea:focus {
   border: 2px solid var(--border-ink);
   overflow: hidden;
   min-width: 80px;
+  /* 每 25% 加一条刻度线，替代纯色块，色弱用户也能辨认大致占比（P2-6） */
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(25% - 2px),
+    var(--border-ink) calc(25% - 2px),
+    var(--border-ink) 25%
+  );
 }
 
 .pbar > i {
