@@ -567,11 +567,14 @@ export function createTryOnPage(opts) {
 
   function renderError(e) {
     const copy = copyFor(e);
+    // 服务端会下发具体原因（如「临时图床都连不上」「生成超时」），透出给用户便于排查
+    const detail = e && e.message && e.message !== copy.msg && e.message !== e.type ? e.message : '';
     resultEl.innerHTML = `
       <div class="result-state error-card">
         <div class="emoji-face">${copy.face || '🪄'}</div>
         <p class="msg">${copy.msg}</p>
         <p class="sub">${copy.sub}</p>
+        ${detail ? `<p class="sub" style="font-size:.78rem;opacity:.75">原因：${esc(detail)}</p>` : ''}
         <div class="result-actions">
           <button class="btn btn-primary btn-sm" data-ract="retry">🔄 重新生成</button>
           <button class="btn btn-ghost btn-sm" data-ract="quota">查看今日额度</button>

@@ -42,9 +42,15 @@ export async function tryOn({ imageBlob, prompt, width, height, signal, onEngine
   if (signal && signal.aborted) throw new AIError('UserCancel', '已取消');
 
   let j = null;
-  try { j = await res.json(); } catch { /* 非结构化响应 */ }
+  try { j = await res.json(); } catch { /* 非结构化响应（平台错误页 504/413 等） */ }
 
   if (!res.ok || !j || !j.ok) {
+    // 平台级错误页：Vercel 超时(504/408) / 请求体过大(413) / 其它非 JSON
+    if (!j) {
+      if (res.status === 413) throw new AIError('TooLarge', '照片太大了，压缩一下再试');
+      if (res.status === 504 || res.status === 408) throw new AIError('Timeout', '生成超时了，请稍后重试');
+      throw new AIError('ServerDown', `服务返回 ${res.status}，请稍后重试`);
+    }
     const type = (j && j.error && j.error.type) || 'Network';
     if (res.status === 401) throw new AIError('Network', '请求被拒绝');
     throw new AIError(type, (j && j.error && j.error.message) || `服务返回 ${res.status}`);

@@ -357,23 +357,33 @@ export function buildChain(keys, preferred = 'auto') {
   return ready;
 }
 
-/* 主链路：逐个尝试，Content 类不降级（结果可能不适合展示） */
-const TIMEOUT_MS = 90000;
+/* 主链路：逐个尝试，Content 类不降级（结果可能不适合展示）
+ * 超时预算必须小于 Vercel 函数上限（60s）：单引擎 40s、整链 55s。
+ * 否则引擎慢时平台先杀函数返回 504 HTML，前端只能拿到非 JSON → 误报「网络不太顺畅」。 */
+const TIMEOUT_MS = 40000;
+const TOTAL_DEADLINE_MS = 55000;
 export async function tryOn({ imageBlob, prompt, width, height, ctx, onEngine }) {
   const chain = buildChain(ctx.keys, ctx.settings.preferred);
   if (!chain.length) throw new AIError('Quota', '站长还没有配置任何可用引擎');
 
+  const t0 = Date.now();
   let lastErr = null;
   for (let i = 0; i < chain.length; i++) {
     const provider = chain[i];
     if (onEngine) onEngine({ index: i + 1, total: chain.length, provider });
+    const remaining = TOTAL_DEADLINE_MS - (Date.now() - t0);
+    if (remaining <= 0) {
+      lastErr = new AIError('Timeout', '生成超时');
+      break;
+    }
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(new Error('timeout')), TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(new Error('timeout')), Math.min(TIMEOUT_MS, remaining));
     try {
       const blob = await provider.edit({ imageBlob, prompt, width, height, signal: ctrl.signal, ctx });
       return { blob, provider };
     } catch (err) {
       lastErr = normalizeError(err);
+      if (ctrl.signal.aborted) lastErr = new AIError('Timeout', '生成超时');
       if (lastErr.type === 'Content') throw lastErr;
     } finally {
       clearTimeout(timer);
