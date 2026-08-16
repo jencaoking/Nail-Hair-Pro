@@ -41,22 +41,45 @@ export function ready() {
   return readyPromise;
 }
 
-/* ---------- 管理员会话（内存态，重启失效） ---------- */
-const sessions = new Map();
+/* ---------- 管理员会话（无状态签名 token：跨实例/冷启动不失效） ----------
+ * Vercel Serverless 多实例 + 频繁冷启动，内存 Map 会话会在实例切换后随机 401 掉登录。
+ * 改为 HMAC 签名 token：payload 内嵌过期时间，任何实例凭持久化的密钥即可验证，
+ * 无需共享内存状态。签名密钥优先取环境变量 ADMIN_SESSION_SECRET，
+ * 否则由持久化的管理员 salt+hash 派生（所有实例从 KV/文件读到同一值）。
+ * 退出登录无需服务端作废：客户端清除 token 即可，token 本身 12h 过期。 */
 const SESSION_MS = 12 * 60 * 60 * 1000;
 let loginHits = [];
 
+function sessionSecret() {
+  const env = process.env.ADMIN_SESSION_SECRET;
+  if (env) return env;
+  const d = store.load();
+  if (d.admin && d.admin.salt) {
+    return crypto.createHash('sha256').update('nhi:session:' + d.admin.salt + ':' + d.admin.hash).digest('hex');
+  }
+  return '';
+}
+
+function signToken(t, exp) {
+  return crypto.createHmac('sha256', sessionSecret()).update(t + '.' + exp).digest('hex');
+}
+
 function newSession() {
   const t = crypto.randomUUID();
-  sessions.set(t, Date.now() + SESSION_MS);
-  return t;
+  const exp = Date.now() + SESSION_MS;
+  return `${t}.${exp}.${signToken(t, exp)}`;
 }
 function checkSession(req) {
   const h = req.headers['authorization'] || '';
-  const t = h.startsWith('Bearer ') ? h.slice(7) : '';
-  const exp = sessions.get(t);
-  if (!exp || exp < Date.now()) { sessions.delete(t); return false; }
-  return true;
+  const raw = h.startsWith('Bearer ') ? h.slice(7) : '';
+  const parts = String(raw).split('.');
+  if (parts.length !== 3) return false;
+  const [t, expStr, sig] = parts;
+  const exp = Number(expStr);
+  if (!t || !exp || exp < Date.now()) return false;
+  const expect = signToken(t, exp);
+  if (expect.length !== sig.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expect), Buffer.from(sig));
 }
 
 /* ---------- 小工具 ---------- */
@@ -94,6 +117,7 @@ async function handleConfig(req, res, url) {
   let u = null;
   if (clientId) {
     u = store.touchUser(clientId, { ip, userAgent: ua, device: dev.summary });
+    store.saveDebounced();   // 新用户/访问记录也要落盘，否则重启/冷启动后档案丢失
   }
 
   const quota = store.getUserQuotaInfo(u, d.settings.dailyLimit);
@@ -278,8 +302,7 @@ async function handleAdmin(req, res, url) {
     return json(res, 200, { ok: true, token: newSession() });
   }
   if (req.method === 'POST' && op === 'logout') {
-    const h = req.headers['authorization'] || '';
-    if (h.startsWith('Bearer ')) sessions.delete(h.slice(7));
+    // 无状态 token 无需服务端作废：客户端清除本地 token 即可
     return json(res, 200, { ok: true });
   }
 
@@ -573,7 +596,7 @@ async function handleAdmin(req, res, url) {
     if (body.next !== undefined && !/^[ -~]{6,64}$/.test(body.next || '')) return json(res, 400, { ok: false, message: '新口令需 6–64 位字符' });
     const ok = store.changePassword(body.current || '', body.next || '');
     if (!ok) return json(res, 400, { ok: false, message: '当前口令不对，或新口令太短（至少 6 位）' });
-    sessions.clear();
+    // 口令变更后 salt/hash 改变，由 salt 派生的会话密钥随之改变，旧 token 自动全部失效
     return json(res, 200, { ok: true, message: '口令已更新，请重新登录', relogin: true });
   }
 

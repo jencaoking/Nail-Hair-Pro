@@ -63,6 +63,9 @@ const DEFAULTS = () => ({
 });
 
 let cache = null;
+/* 数据来源：'kv'（KV 读取成功，可安全写回）| 'file'（本地文件）| 'defaults'（读取失败，内存降级态）。
+ * 降级态下禁止写回，防止把空默认值覆盖真实数据（否则一次 KV 抖动就会清空所有用户档案）。 */
+let dataOrigin = 'defaults';
 
 /* 把磁盘/KV 里的原始 JSON 与默认值做深度合并（空密钥回退到环境变量） */
 function mergeRaw(raw) {
@@ -120,8 +123,10 @@ async function kvSet(jsonStr) {
 if (!IS_VERCEL) {
   try {
     cache = mergeRaw(JSON.parse(fs.readFileSync(FILE, 'utf8')));
+    dataOrigin = 'file';
   } catch {
     cache = DEFAULTS();
+    dataOrigin = 'defaults';
   }
 }
 
@@ -134,6 +139,7 @@ export function ensureLoaded() {
       if (KV_URL && KV_TOKEN) {
         try {
           cache = mergeRaw(JSON.parse((await kvGet()) || '{}'));
+          dataOrigin = 'kv';
           return;
         } catch (e) {
           console.error('[store] KV 读取失败，改用内存态', e.message);
@@ -142,13 +148,17 @@ export function ensureLoaded() {
         console.error('[store] 已部署到 Vercel 但未配置 UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN，数据将不持久化');
       }
       cache = DEFAULTS();
+      dataOrigin = 'defaults';
     })();
   }
   return readyPromise;
 }
 
 export function load() {
-  if (!cache) cache = DEFAULTS();
+  if (!cache) {
+    cache = DEFAULTS();
+    dataOrigin = 'defaults';
+  }
   return cache;
 }
 
@@ -159,6 +169,11 @@ export function save() {
   dirty = false;
   if (IS_VERCEL) {
     if (!KV_URL || !KV_TOKEN) return;   // 未配 KV，仅内存态
+    if (dataOrigin !== 'kv') {
+      // 降级态（KV 读取失败）：只读不写，防止空默认值覆盖真实档案数据
+      console.error('[store] 内存降级态，跳过 KV 写入（防止覆盖已存数据）');
+      return;
+    }
     const p = kvSet(JSON.stringify(cache))
       .catch(err => console.error('[store] KV 写入失败', err.message))
       .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
