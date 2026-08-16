@@ -35,7 +35,7 @@ nail-hair-inspo/
 │   ├── userLearning.mjs    # 用户画像与推荐算法
 │   └── data.json           # 运行时数据（本地首启自动生成，不入库）
 ├── api/
-│   └── index.js            # Vercel Serverless 函数入口（接管 /api/*）
+│   └── index.js            # Vercel Serverless 函数入口（Web 标准 fetch 签名，桥接 /api/*）
 ├── vercel.json             # Vercel 部署配置（builds + 函数超时）
 ├── index.html              # 用户端页面
 ├── admin.html              # 管理后台页面
