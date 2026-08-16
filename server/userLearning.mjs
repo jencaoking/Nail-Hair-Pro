@@ -367,8 +367,9 @@ export function recommendInspirations(persona, options = {}) {
 
 /**
  * 聚合计算全站用户画像分布统计
+ * @param {object} [personaCache] 可选：{clientId → persona} 预计算结果，避免每个用户重复计算两次
  */
-export function aggregateUserPersonas(userRecords = {}, settings = DEFAULT_REC_SETTINGS) {
+export function aggregateUserPersonas(userRecords = {}, settings = DEFAULT_REC_SETTINGS, personaCache = null) {
   const distribution = {};
   const tagHeatmap = {};
   const catDistribution = { nail: 0, hairColor: 0, hairStyle: 0 };
@@ -393,7 +394,7 @@ export function aggregateUserPersonas(userRecords = {}, settings = DEFAULT_REC_S
   const usersList = Object.entries(userRecords);
   for (const [clientId, u] of usersList) {
     const events = u.behaviorEvents || [];
-    const persona = computeUserPersona(events, settings);
+    const persona = (personaCache && personaCache[clientId]) || computeUserPersona(events, settings);
 
     if (events.length > 0) activeUsersCount++;
     totalConfidence += persona.confidence;

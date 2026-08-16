@@ -505,25 +505,37 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'GET' && op === 'personas') {
     const d = store.load();
     const recSettings = store.getRecommendationSettings();
-    const aggregate = aggregateUserPersonas(d.users, recSettings);
-    const usersPersonaList = Object.entries(d.users).map(([clientId, u]) => {
-      const events = u.behaviorEvents || [];
-      const persona = computeUserPersona(events, recSettings);
+    // 先统一计算一次所有用户画像，供聚合与列表复用，避免每个用户重复计算两次
+    const personaCache = {};
+    for (const [clientId, u] of Object.entries(d.users)) {
+      personaCache[clientId] = computeUserPersona(u.behaviorEvents || [], recSettings);
+    }
+    const aggregate = aggregateUserPersonas(d.users, recSettings, personaCache);
+    // 只返回前端需要的精简字段（不内嵌完整 persona 的 allTagScores/colorAffinities 等大对象），
+    // 否则用户多时响应体可达数 MB，前端解析/渲染卡死
+    // 键名/字段对齐 admin.js viewPersonas：userList[]，每项含 clientId / shortId / personaName / personaBadge / eventCount
+    const userList = Object.entries(d.users).map(([clientId, u]) => {
+      const persona = personaCache[clientId];
       return {
-        id: clientId,
+        clientId,
+        shortId: clientId.slice(0, 10),
         first: u.first,
         last: u.last,
         total: u.total,
         dayCount: u.dayCount,
         blocked: !!u.blocked,
-        persona
+        eventCount: persona.stats.totalEvents,
+        personaName: persona.personaName,
+        personaBadge: persona.personaBadge,
+        personaType: persona.personaType,
+        confidence: persona.confidence
       };
-    }).sort((a, b) => (b.persona.stats.totalEvents || 0) - (a.persona.stats.totalEvents || 0));
+    }).sort((a, b) => (b.eventCount || 0) - (a.eventCount || 0));
 
     return json(res, 200, {
       ok: true,
       aggregate,
-      users: usersPersonaList,
+      userList,
       presets: REC_PRESETS,
       currentSettings: recSettings
     });
