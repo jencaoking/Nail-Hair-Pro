@@ -212,8 +212,14 @@ async function handleTryon(req, res) {
   if (!clientId) return json(res, 400, { ok: false, error: { type: 'Network', message: '缺少有效的 clientId' } });
   const img = parseDataUrl(body.image);
   if (!img || img.b64.length < 100) return json(res, 400, { ok: false, error: { type: 'Network', message: '照片缺失或格式不支持' } });
-  if (!body.prompt || !String(body.prompt).trim()) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述不能为空' } });
-  if (String(body.prompt).length > 2000) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述过长，请精简到 2000 字以内' } });
+  // 服务端兜底清洗：剥离控制字符/换行并折叠空白，阻断通过 curl 直调注入换行分隔指令等结构性手段。
+  // 前端已对用户输入做 sanitizeUserText + 语义隔离，此处作为最后防线（不信任任何客户端输入）。
+  const prompt = String(body.prompt || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!prompt) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述不能为空' } });
+  if (prompt.length > 2000) return json(res, 400, { ok: false, error: { type: 'Network', message: '描述过长，请精简到 2000 字以内' } });
 
   const ip = parseIp(req);
   const ua = req.headers['user-agent'] || '';
@@ -231,7 +237,6 @@ async function handleTryon(req, res) {
   const width = Math.min(1440, Math.max(256, Number(body.width) || 1024));
   const height = Math.min(1440, Math.max(256, Number(body.height) || 768));
   const blobIn = new Blob([Buffer.from(img.b64, 'base64')], { type: img.mime });
-  const prompt = String(body.prompt);
 
   // 记录学习行为
   store.recordUserBehavior(clientId, [{
