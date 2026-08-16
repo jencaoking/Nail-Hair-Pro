@@ -407,6 +407,79 @@
   box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 0.9);
 }
 
+/* ---- 首页「今日精选灵感款式推荐」专区 ---- */
+.home-persona-banner {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+}
+.home-persona-banner .persona-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.home-persona-banner .persona-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.home-persona-banner .persona-info strong {
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--ink-strong);
+}
+.home-persona-banner .persona-tag {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--yellow-soft);
+  border: 2px solid var(--border-ink);
+  box-shadow: 2px 2px 0px 0px rgba(26, 26, 26, 1);
+}
+.home-persona-banner .persona-conf {
+  flex-shrink: 0;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--surface);
+  border: 2px solid var(--border-ink);
+  border-radius: var(--r-s);
+  padding: 3px 10px;
+}
+.home-persona-banner .persona-desc {
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+/* 推荐卡片网格：2 列起步，宽屏自动增列 */
+.home-persona-banner .persona-recs-scroll {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: 0;
+  overflow: visible;
+  -webkit-overflow-scrolling: touch;
+}
+.home-persona-banner .persona-recs-scroll .insp-card {
+  width: auto;
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .home-persona-banner .persona-recs-scroll { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1024px) {
+  .home-persona-banner .persona-recs-scroll { grid-template-columns: repeat(4, 1fr); }
+}
+
+
 .insp-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
