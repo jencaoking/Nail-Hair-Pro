@@ -332,6 +332,7 @@ export function createTryOnPage(opts) {
     }
     let phash = null;
     stopCameraUI();
+    toast('正在优化照片…');
     try {
       const r = await toJpegBlob(blob, {
         enhance: isEnhance(),
