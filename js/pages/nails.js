@@ -3,14 +3,14 @@
  */
 import { cameraSupported, createCamera, explainCameraError } from '../capture/camera.js';
 import { toJpegBlob } from '../capture/preprocess.js';
-import { isEnhance } from '../store/settings.js';
+import { isEnhance, getEngine, set as setSettings } from '../store/settings.js';
 import { renderInspCard, byId, byCat } from '../data/inspirations.js';
 import { buildPrompt, genSize } from '../data/prompts.js';
 import { detectStructure } from '../ai/landmarks.js';
 import { getSamplePhoto } from '../data/samples.js';
 import { tryOn } from '../ai/api.js';
 import { normalizeError, copyFor } from '../ai/errors.js';
-import { bumpUsage } from '../ai/registry.js';
+import { bumpUsage, fetchConfig } from '../ai/registry.js';
 import { renderCompare } from '../ui/compare.js';
 import { openModal } from '../ui/modal.js';
 import { toast } from '../ui/toast.js';
@@ -113,6 +113,13 @@ export function createTryOnPage(opts) {
       <div class="prompt-chips" id="chips-${cat}"></div>
     </div>
 
+    <div class="engine-picker-row" hidden>
+      <label for="engine-${cat}">⚙️ 生成引擎</label>
+      <select id="engine-${cat}" data-engine-select>
+        <option value="auto">自动（推荐）</option>
+      </select>
+    </div>
+
     <div class="gen-row">
       <button class="btn btn-primary btn-block btn-lg" data-act="generate">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -147,11 +154,33 @@ export function createTryOnPage(opts) {
   const capsule = q(`#capsule-${cat}`);
   const capsuleTitle = q(`#capsule-title-${cat}`);
   const chipsBox = q(`#chips-${cat}`);
+  const enginePickerRow = q('.engine-picker-row');
+  const engineSelect = q('[data-engine-select]');
 
   camera = createCamera(video);
 
   const show = el => { if (!el) return; el.hidden = false; el.classList.remove('is-hidden'); };
   const hide = el => { if (!el) return; el.hidden = true;  el.classList.add('is-hidden'); };
+
+  /* ---------- 生成引擎选择器：拉取服务端已配置引擎，用户可选，持久化到 settings ---------- */
+  async function initEnginePicker() {
+    if (!enginePickerRow || !engineSelect) return;
+    const config = await fetchConfig().catch(() => null);
+    const engines = (config && config.engines) || [];
+    // 只有至少 2 个可用引擎（自动 + ≥1 具体）才展示选择器，避免对单一引擎用户造成困惑
+    if (engines.length < 2) { hide(enginePickerRow); return; }
+
+    const saved = getEngine();
+    const cur = engines.some(e => e.id === saved) ? saved : 'auto';
+    engineSelect.innerHTML = '<option value="auto">自动（推荐）</option>' +
+      engines.map(e => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('');
+    engineSelect.value = cur;
+    engineSelect.addEventListener('change', () => {
+      setSettings({ engine: engineSelect.value });
+      toast(engineSelect.value === 'auto' ? '已切换为自动引擎' : `已选择引擎：${engineSelect.selectedOptions[0]?.textContent || engineSelect.value}`);
+    });
+    show(enginePickerRow);
+  }
 
   /* ---------- 渲染快捷提示词 ---------- */
   function renderPromptChips() {
@@ -532,6 +561,7 @@ export function createTryOnPage(opts) {
           width,
           height,
           cat: catKey,
+          engine: getEngine(),
           phash: photoPhash
         });
         await updateHistory(recId, { afterBlob: blob, provider: provider.label, status: 'done' });
@@ -641,6 +671,7 @@ export function createTryOnPage(opts) {
     onEnter() {
       updateGenerateLabel();
       renderPromptChips();
+      initEnginePicker();
     },
     onLeave() {
       stopCameraUI();

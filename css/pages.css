@@ -657,6 +657,30 @@
   display: flex;
   gap: var(--sp-2);
 }
+.engine-picker-row {
+  margin-top: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.engine-picker-row label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+.engine-picker-row select {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 12px;
+  border: 3px solid var(--border-ink);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 2px 2px 0px 0px rgba(26, 26, 26, 1);
+  cursor: pointer;
+}
 
 /* 结果面板状态 */
 .result-state {
@@ -750,6 +774,12 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  /* 允许换行：窄屏下 engine-chip 换到下一行，避免与 who 内的 ID chip 视觉重叠 */
+  flex-wrap: wrap;
+}
+.user-row .engine-chip {
+  /* 在 who 右侧自然排列；窄屏下因 flex-wrap 自动换行 */
+  margin-left: auto;
 }
 .user-row .avatar {
   width: 56px;
@@ -768,7 +798,7 @@
 }
 .user-row .who {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 220px; /* 给一个最小基准，避免 ID chip 被挤溢出 */
   display: grid;
   gap: 4px;
 }
@@ -785,6 +815,19 @@
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--muted);
+}
+/* 窄屏：engine-chip 换行后单独成行并贴右，避免与 ID chip 同行时的视觉重叠 */
+@media (max-width: 520px) {
+  .user-row {
+    row-gap: 10px;
+  }
+  .user-row .who {
+    flex-basis: calc(100% - 70px); /* avatar 56 + gap 14 */
+  }
+  .user-row .engine-chip {
+    margin-left: 70px; /* 与 who 左对齐对齐到 avatar 右缘 */
+    flex-basis: calc(100% - 70px);
+  }
 }
 .quota-track {
   margin-top: 14px;

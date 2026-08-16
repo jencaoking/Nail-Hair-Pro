@@ -189,7 +189,7 @@ const gemini = {
     const key = ctx.keys.gemini;
     const b64 = await b64Of(imageBlob);
     const res = await pfetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${encodeURIComponent(key)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${encodeURIComponent(key)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,9 +219,9 @@ const gemini = {
     return blobOf(inline.data, inline.mime_type || inline.mimeType || 'image/png');
   },
   async verify(ctx) {
-    // 用现行模型做轻量文本外呼验证密钥；不要用已下架模型（如 gemini-2.0-flash，访问会 404）
+    // 用当前稳定文本模型做轻量外呼验证密钥；模型名需与官方现行列表一致，否则会 404
     const res = await pfetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(ctx.keys.gemini)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${encodeURIComponent(ctx.keys.gemini)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -248,13 +248,21 @@ async function handleTryon(req, res) {
     }
   }
 
+  /* 用户可指定引擎：仅当该引擎已配置可用（在当前链中）时优先，否则回退站点首选/自动 */
+  const wantEngine = typeof body.engine === 'string' ? body.engine.trim() : '';
+  const chain = buildChain(d.keys, d.settings.preferred);
+  const settings = {
+    ...d.settings,
+    preferred: wantEngine && chain.some(p => p.id === wantEngine) ? wantEngine : d.settings.preferred
+  };
+
   let providerUsed = '';
   try {
     const { blob, provider } = await tryOn({
       imageBlob: blobIn,
       prompt,
       width, height,
-      ctx: { keys: d.keys, settings: d.settings },
+      ctx: { keys: d.keys, settings },
       onEngine: ({ provider }) => { providerUsed = provider.id; }
     });
     const b64 = Buffer.from(await blob.arrayBuffer()).toString('base64');
