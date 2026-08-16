@@ -14,7 +14,7 @@ import { bumpUsage } from '../ai/registry.js';
 import { renderCompare } from '../ui/compare.js';
 import { openModal } from '../ui/modal.js';
 import { toast } from '../ui/toast.js';
-import { addHistory } from '../store/db.js';
+import { addHistory, updateHistory } from '../store/db.js';
 import { trackBehavior } from '../store/userLearning.js';
 import { go } from '../router.js';
 
@@ -453,9 +453,11 @@ export function createTryOnPage(opts) {
     return card;
   }
 
-  /* ---------- AI 生成核心 ---------- */
+  /* ---------- AI 生成核心（后台模式：立即回「我的」，AI 后台完成后更新记录） ---------- */
+  let bgBusy = false;
+
   async function generate() {
-    if (abortCtrl) return;
+    if (bgBusy) { toast('已有一次生成在进行中，请稍候', 'err'); return; }
     if (!photoBlob) {
       openModal({
         title: '请先提供照片',
@@ -480,73 +482,54 @@ export function createTryOnPage(opts) {
     }
     const prompt = buildPrompt(catKey, selectedInspId, customInput.value, { structure });
     const { width, height } = genSize(aspect);
+    const insp = selectedInspId ? byId(selectedInspId) : null;
+    const title = insp ? insp.title : (customInput.value.trim().slice(0, 18) || '自定义款式');
 
-    abortCtrl = new AbortController();
-    generateBtn.disabled = true;
-    show(cancelBtn);
-    show(engineBox);
-    renderLoading();
-
-    let phraseIdx = 0;
-    phraseTimer = setInterval(() => {
-      const cap = resultEl.querySelector('.heart-spin .txt');
-      if (cap) cap.textContent = phrases[++phraseIdx % phrases.length];
-      const prog = Math.min(92, 25 + phraseIdx * 15);
-      engineBar.style.width = prog + '%';
-    }, 2400);
-
+    // 1) 先写一条「生成中」占位记录（后台完成后原地更新）
+    let recId;
     try {
-      const { blob, provider } = await tryOn({
-        imageBlob: photoBlob,
-        prompt,
-        width,
-        height,
-        phash: photoPhash,
-        signal: abortCtrl.signal,
-        onEngine: ({ provider: p }) => {
-          engineBar.style.width = '75%';
-          engineCap.textContent = `AI 渲染中 · 服务商 ${p.label}`;
-        }
-      });
-
-      lastResultBlob = blob;
-      lastProvider = provider;
-      renderResult(blob, provider);
-
-      const insp = selectedInspId ? byId(selectedInspId) : null;
-      trackBehavior({
-        type: 'tryon_generate',
+      recId = await addHistory({
         cat: catKey,
-        inspId: selectedInspId,
-        tags: insp ? insp.tags : []
-      });
-
-      await addHistory({
-        cat: catKey,
-        title: insp ? insp.title : (customInput.value.trim().slice(0, 18) || '自定义款式'),
+        title,
         beforeBlob: photoBlob,
-        afterBlob: blob,
-        provider: provider.label,
+        afterBlob: null,
+        provider: '',
+        status: 'generating',
         createdAt: Date.now()
       });
-      bumpUsage();
-      toast('试戴完成！您可以拖动滑块对比前后效果', 'ok');
-    } catch (err) {
-      const e = normalizeError(err);
-      if (e.type === 'UserCancel') {
-        renderIdle();
-        toast('已取消这次生成');
-      } else {
-        renderError(e);
-      }
-    } finally {
-      clearInterval(phraseTimer);
-      abortCtrl = null;
-      generateBtn.disabled = false;
-      hide(cancelBtn);
-      hide(engineBox);
-      engineBar.style.width = '25%';
+    } catch (e) {
+      toast('保存记录失败，请重试', 'err');
+      return;
     }
+
+    // 2) 立即回到「我的」页，AI 在后台继续生成
+    toast('✨ 已提交生成，完成后自动出现在「我的」记录里');
+    go('mine');
+
+    // 3) 后台生成：不阻塞页面，完成后更新占位记录；失败则标记 error
+    bgBusy = true;
+    (async () => {
+      try {
+        const { blob, provider } = await tryOn({
+          imageBlob: photoBlob,
+          prompt,
+          width,
+          height,
+          phash: photoPhash
+        });
+        await updateHistory(recId, { afterBlob: blob, provider: provider.label, status: 'done' });
+        trackBehavior({ type: 'tryon_generate', cat: catKey, inspId: selectedInspId, tags: insp ? insp.tags : [] });
+        bumpUsage();
+        toast('试戴完成！已保存到「我的」记录', 'ok');
+      } catch (err) {
+        const e = normalizeError(err);
+        const copy = copyFor(e);
+        await updateHistory(recId, { status: 'error', error: e.message || copy.msg }).catch(() => {});
+        toast(copy.msg, 'err');
+      } finally {
+        bgBusy = false;
+      }
+    })();
   }
 
   /* ---------- 结果状态渲染 ---------- */

@@ -11,6 +11,8 @@ import { toast } from '../ui/toast.js';
 
 const CAT_LABEL = { nail: '美甲', hairColor: '发色', hairStyle: '发型' };
 let currentHistoryFilter = 'all';
+let historyPollTimer = null;      // 后台生成期间轮询刷新「我的」记录
+let historyUrls = new Set();      // 已创建的 objectURL，重渲染前回收防泄漏
 
 /* ---------- 用户卡 ---------- */
 async function renderUserCard() {
@@ -124,6 +126,9 @@ async function renderUserCard() {
 async function renderHistory() {
   const box = document.getElementById('mine-history');
   if (!box) return;
+  // 回收上一轮 objectURL，避免轮询刷新时内存泄漏
+  for (const u of historyUrls) URL.revokeObjectURL(u);
+  historyUrls.clear();
   const rawList = await listHistory();
 
   let list = rawList;
@@ -166,7 +171,63 @@ async function renderHistory() {
 
   const grid = box.querySelector('.history-grid');
   list.forEach(rec => {
+    // 后台生成中的占位卡
+    if (rec.status === 'generating') {
+      const card = document.createElement('div');
+      card.className = 'history-card generating';
+      card.innerHTML = `
+        <div class="pic" style="display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#fff5f7,#fff0f3 12px)">
+          <div class="spin" style="width:34px;height:34px;border:3px solid #fbd5e0;border-top-color:#F43F6E;border-radius:50%;animation:spin 1s linear infinite"></div>
+        </div>
+        <div class="meta">
+          <span style="min-width:0">
+            <span class="chip plain" style="margin-right:4px">${CAT_LABEL[rec.cat] || rec.cat}</span>
+            <span class="t">${esc(rec.title)}</span>
+            <span class="d" style="display:block">⏳ AI 生成中…</span>
+          </span>
+          <button class="del" aria-label="删除这条记录" title="删除">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2M6.5 7l1 13h9l1-13"/></svg>
+          </button>
+        </div>`;
+      card.querySelector('button.del').addEventListener('click', async e => {
+        e.stopPropagation();
+        await deleteHistory(rec.id);
+        toast('已删除该记录');
+        renderHistory();
+      });
+      grid.appendChild(card);
+      return;
+    }
+    // 生成失败的记录
+    if (rec.status === 'error') {
+      const card = document.createElement('div');
+      card.className = 'history-card error';
+      card.innerHTML = `
+        <div class="pic" style="display:flex;align-items:center;justify-content:center;background:#fdf2f2">
+          <span style="font-size:1.6rem">😿</span>
+        </div>
+        <div class="meta">
+          <span style="min-width:0">
+            <span class="chip plain" style="margin-right:4px">${CAT_LABEL[rec.cat] || rec.cat}</span>
+            <span class="t">${esc(rec.title)}</span>
+            <span class="d" style="display:block">生成失败：${esc(rec.error || '未知原因')}</span>
+          </span>
+          <button class="del" aria-label="删除这条记录" title="删除">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2M6.5 7l1 13h9l1-13"/></svg>
+          </button>
+        </div>`;
+      card.querySelector('button.del').addEventListener('click', async e => {
+        e.stopPropagation();
+        await deleteHistory(rec.id);
+        toast('已删除该记录');
+        renderHistory();
+      });
+      grid.appendChild(card);
+      return;
+    }
+    // 正常记录
     const afterUrl = URL.createObjectURL(rec.afterBlob);
+    historyUrls.add(afterUrl);
     const card = document.createElement('div');
     card.className = 'history-card';
     const d = new Date(rec.createdAt);
@@ -231,6 +292,17 @@ async function renderHistory() {
       }
     });
   });
+
+  /* 后台生成自动刷新：存在「生成中」记录时轮询，全部完成/失败后停止 */
+  const hasGenerating = list.some(r => r.status === 'generating');
+  if (hasGenerating) {
+    if (!historyPollTimer) {
+      historyPollTimer = setInterval(() => renderHistory(), 2000);
+    }
+  } else if (historyPollTimer) {
+    clearInterval(historyPollTimer);
+    historyPollTimer = null;
+  }
 }
 
 export default {
@@ -238,5 +310,7 @@ export default {
     renderUserCard();
     renderHistory();
   },
-  onLeave() { }
+  onLeave() {
+    if (historyPollTimer) { clearInterval(historyPollTimer); historyPollTimer = null; }
+  }
 };

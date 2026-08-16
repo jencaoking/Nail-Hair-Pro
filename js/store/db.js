@@ -32,8 +32,16 @@ function run(mode, fn) {
 }
 
 export async function addHistory(record) {
-  await run('readwrite', s => s.add(record));
+  const id = await run('readwrite', s => s.add(record));
   await pruneTo(MAX_RECORDS);
+  return id;
+}
+
+/* 按 id 局部更新记录（后台生成完成后写入 afterBlob/status 等） */
+export async function updateHistory(id, patch) {
+  const rec = await run('readonly', s => s.get(id));
+  if (!rec) return;
+  await run('readwrite', s => s.put({ ...rec, ...patch }));
 }
 
 export async function listHistory() {
