@@ -259,11 +259,14 @@ async function renderHistory() {
     img.src = afterUrl;
 
     card.querySelector('.pic').addEventListener('click', () => {
+      // 弹窗内独立新建 objectURL，不复用渲染期 URL（renderHistory 轮询/重渲染会回收它，导致弹窗图片失效）
       const beforeUrl = URL.createObjectURL(rec.beforeBlob);
+      const afterUrl = URL.createObjectURL(rec.afterBlob);
       openModal({
         title: `对比效果：${rec.title}`,
         body: '<div class="cmp-slot" style="aspect-ratio:4/3;border-radius:12px;overflow:hidden"></div>',
-        actions: [{ key: 'close', label: '关闭', cls: 'btn-primary' }]
+        actions: [{ key: 'close', label: '关闭', cls: 'btn-primary' }],
+        onClose: () => { URL.revokeObjectURL(beforeUrl); URL.revokeObjectURL(afterUrl); }
       });
       const slot = document.querySelector('#modal-root .cmp-slot');
       if (slot) {
