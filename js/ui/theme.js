@@ -62,12 +62,14 @@ export function setTheme(mode, notifyUser = false) {
 }
 
 /**
- * 切换明暗主题 (light <-> dark)
+ * 切换主题：三态循环 light → dark → auto → light
+ * 之前的实现只做 light<->dark 二态切换，会把「跟随系统(auto)」用户悄悄切换成固定主题，
+ * 退出跟随系统状态。改成三态循环后 auto 仍是可达状态，不会丢失。
  * @param {boolean} [notifyUser=true]
  */
 export function toggleTheme(notifyUser = true) {
-  const current = getResolvedTheme();
-  const next = current === 'dark' ? 'light' : 'dark';
+  const mode = getTheme();
+  const next = mode === 'light' ? 'dark' : mode === 'dark' ? 'auto' : 'light';
   setTheme(next, notifyUser);
   return next;
 }
@@ -150,7 +152,7 @@ export function bindThemeToggleBtn(btn) {
     const icon = resolved === 'dark' ? '🌙' : '☀️';
     const text = mode === 'auto' ? `跟随系统 (${resolved === 'dark' ? '暗黑' : '浅色'})` : (mode === 'dark' ? '暗黑模式' : '浅色明亮');
     btn.innerHTML = `<span class="theme-icon" aria-hidden="true">${icon}</span><span class="sr-only">${text}</span>`;
-    btn.setAttribute('title', `当前：${text}，点击切换明暗主题`);
+    btn.setAttribute('title', `当前：${text}，点击切换主题（浅色 → 暗黑 → 跟随系统）`);
   };
 
   btn.addEventListener('click', (e) => {

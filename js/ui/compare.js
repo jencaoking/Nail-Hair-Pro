@@ -15,14 +15,27 @@ export function renderCompare(containerEl, beforeUrl, afterUrl, defaultMode = 's
 
   const modeBar = document.createElement('div');
   modeBar.className = 'cmp-mode-bar';
-  modeBar.innerHTML = `
-    <button type="button" class="${defaultMode === 'slider' ? 'active' : ''}" data-mode="slider">滑块对比</button>
-    <button type="button" class="${defaultMode === 'side' ? 'active' : ''}" data-mode="side">左右并排</button>
-    <button type="button" class="${defaultMode === 'hold' ? 'active' : ''}" data-mode="hold">长按看原图</button>
-  `;
+  modeBar.setAttribute('role', 'tablist');
+  modeBar.setAttribute('aria-label', '对比模式');
+  const MODES = [
+    { mode: 'slider', label: '滑块对比' },
+    { mode: 'side', label: '左右并排' },
+    { mode: 'hold', label: '长按看原图' }
+  ];
+  MODES.forEach(m => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = m.mode === defaultMode ? 'active' : '';
+    b.dataset.mode = m.mode;
+    b.textContent = m.label;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', m.mode === defaultMode ? 'true' : 'false');
+    modeBar.appendChild(b);
+  });
 
   const viewArea = document.createElement('div');
   viewArea.className = 'cmp-view-area';
+  viewArea.setAttribute('role', 'tabpanel');
 
   wrapper.appendChild(modeBar);
   wrapper.appendChild(viewArea);
@@ -30,6 +43,7 @@ export function renderCompare(containerEl, beforeUrl, afterUrl, defaultMode = 's
 
   let currentMode = defaultMode;
   let sliderCleanup = null;
+  let holdCleanup = null;
 
   function renderSliderMode() {
     viewArea.innerHTML = '';
@@ -119,30 +133,55 @@ export function renderCompare(containerEl, beforeUrl, afterUrl, defaultMode = 's
   }
 
   function renderSideMode() {
-    viewArea.innerHTML = `
-      <div class="cmp-side-by-side">
-        <div class="side-box">
-          <span class="side-label">试戴前</span>
-          <img src="${beforeUrl}" alt="原图" decoding="async">
-        </div>
-        <div class="side-box">
-          <span class="side-label" style="background:var(--primary-deep)">✨ 试戴后</span>
-          <img src="${afterUrl}" alt="效果图" decoding="async">
-        </div>
-      </div>
-    `;
+    viewArea.innerHTML = '';
+    const side = document.createElement('div');
+    side.className = 'cmp-side-by-side';
+
+    const makeBox = (label, url, alt, isAfter) => {
+      const box = document.createElement('div');
+      box.className = 'side-box';
+      const lbl = document.createElement('span');
+      lbl.className = 'side-label';
+      if (isAfter) lbl.style.background = 'var(--primary-deep)';
+      lbl.textContent = label;
+      const img = document.createElement('img');
+      img.src = url;                  // 属性赋值，不经 HTML 解析（避免 URL 含引号触发注入）
+      img.alt = alt;
+      img.decoding = 'async';
+      box.append(lbl, img);
+      return box;
+    };
+
+    side.append(
+      makeBox('试戴前', beforeUrl, '原图', false),
+      makeBox('✨ 试戴后', afterUrl, '效果图', true)
+    );
+    viewArea.appendChild(side);
   }
 
   function renderHoldMode() {
-    viewArea.innerHTML = `
-      <div class="cmp hold-cmp" style="cursor:pointer;position:relative">
-        <img class="hold-img" src="${afterUrl}" alt="试戴效果" style="width:100%;height:100%;object-fit:cover">
-        <span class="cmp-tag after" style="top:14px;right:14px">按住屏幕查看原图</span>
-      </div>
-    `;
-    const holdBox = viewArea.querySelector('.hold-cmp');
-    const holdImg = viewArea.querySelector('.hold-img');
-    const tag = viewArea.querySelector('.cmp-tag');
+    viewArea.innerHTML = '';
+    const cmp = document.createElement('div');
+    cmp.className = 'cmp hold-cmp';
+    cmp.style.cursor = 'pointer';
+    cmp.style.position = 'relative';
+
+    const holdImg = document.createElement('img');
+    holdImg.className = 'hold-img';
+    holdImg.src = afterUrl;           // 属性赋值，不经 HTML 解析
+    holdImg.alt = '试戴效果';
+    holdImg.style.width = '100%';
+    holdImg.style.height = '100%';
+    holdImg.style.objectFit = 'cover';
+
+    const tag = document.createElement('span');
+    tag.className = 'cmp-tag after';
+    tag.style.top = '14px';
+    tag.style.right = '14px';
+    tag.textContent = '按住屏幕查看原图';
+
+    cmp.append(holdImg, tag);
+    viewArea.appendChild(cmp);
 
     const showBefore = () => {
       holdImg.src = beforeUrl;
@@ -155,16 +194,27 @@ export function renderCompare(containerEl, beforeUrl, afterUrl, defaultMode = 's
       tag.style.background = '';
     };
 
-    holdBox.addEventListener('pointerdown', showBefore);
+    cmp.addEventListener('pointerdown', showBefore);
     window.addEventListener('pointerup', showAfter);
     window.addEventListener('pointercancel', showAfter);
+
+    // 关键修复：hold 模式绑定在 window 上的监听器必须清理，否则「滑块↔长按」来回切换
+    // 会在 window 上累积 2N 个 pointerup/pointercancel，并持有已销毁 DOM 的引用导致内存泄漏。
+    holdCleanup = () => {
+      cmp.removeEventListener('pointerdown', showBefore);
+      window.removeEventListener('pointerup', showAfter);
+      window.removeEventListener('pointercancel', showAfter);
+    };
   }
 
   function switchMode(mode) {
     if (sliderCleanup) { sliderCleanup(); sliderCleanup = null; }
+    if (holdCleanup) { holdCleanup(); holdCleanup = null; }
     currentMode = mode;
     modeBar.querySelectorAll('button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
+      const active = btn.dataset.mode === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
 
     if (mode === 'slider') renderSliderMode();
