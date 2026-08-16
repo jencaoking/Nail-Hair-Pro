@@ -72,6 +72,18 @@ export async function toJpegBlob(source, {
   enhance = false,
   subject = 'auto' // 'auto' | 'skin' | 'none'，仅 enhance 时生效
 } = {}) {
+  // 输入合法性校验：尽早失败并给出可读错误，避免 createImageBitmap 与 loadViaImgEl
+  // 双重尝试都失败后才冒出一个晦涩错误。
+  if (!source || typeof source !== 'object') {
+    throw new Error('请选择有效的图片文件');
+  }
+  if (typeof Blob !== 'undefined' && source instanceof Blob) {
+    if (source.size === 0) throw new Error('图片文件为空');
+    const t = String(source.type || '').toLowerCase();
+    // 仅当 MIME 明确且不是 image/* 时拒绝；type 为空（部分来源未标注）不拦，交给解码器判断
+    if (t && !t.startsWith('image/')) throw new Error('请选择图片文件');
+  }
+
   let bitmap;
   try {
     bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
