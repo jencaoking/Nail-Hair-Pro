@@ -35,8 +35,8 @@ nail-hair-inspo/
 │   ├── userLearning.mjs    # 用户画像与推荐算法
 │   └── data.json           # 运行时数据（本地首启自动生成，不入库）
 ├── api/
-│   └── [...path].js        # Vercel Serverless 函数入口（接管 /api/*）
-├── vercel.json             # Vercel 部署配置（rewrite + 函数超时）
+│   └── index.js            # Vercel Serverless 函数入口（接管 /api/*）
+├── vercel.json             # Vercel 部署配置（builds + 函数超时）
 ├── index.html              # 用户端页面
 ├── admin.html              # 管理后台页面
 ├── js/
@@ -71,7 +71,7 @@ node server.mjs
 
 ## 部署到 Vercel
 
-本项目已改造为 Vercel Serverless Functions 架构：前端静态托管，后端 `/api/*` 由 `api/[...path].js` 单个 catch-all 函数处理，数据存储自动从本地文件切换为 Upstash Redis（REST 接口，零依赖、仅 `fetch`）。
+本项目已改造为 Vercel Serverless Functions 架构：前端静态托管，后端 `/api/*` 由 `api/index.js` 函数处理，数据存储自动从本地文件切换为 Upstash Redis（REST 接口，零依赖、仅 `fetch`）。
 
 ### 前置条件
 
