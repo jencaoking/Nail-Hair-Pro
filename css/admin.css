@@ -1505,21 +1505,36 @@ textarea:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
   margin-bottom: 14px;
 }
+/* 复用全局 input/select 主题（不覆盖 background/color，让主题变量统一驱动），
+   仅收紧尺寸/字号以适配筛选条高度 */
 .research-filters input,
 .research-filters select {
-  padding: 6px 10px;
-  border: 1.5px solid var(--border-ink, #e2d8cf);
-  border-radius: 8px;
-  font-size: 0.82rem;
-  background: var(--bg-card, #fff);
-  color: inherit;
+  flex: 0 1 160px;
   min-width: 110px;
+  min-height: 38px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
 }
-.research-filters .btn { white-space: nowrap; }
-.research-filters .danger { color: var(--danger, #dc2626); border-color: currentColor; }
+/* select 展开后的 option 不受 select 本身控制，需单独适配主题 */
+.research-filters select option {
+  background: var(--surface);
+  color: var(--ink-strong);
+}
+.research-filters .btn { white-space: nowrap; flex: 0 0 auto; }
+/* 危险操作按钮：fill 风格，与 btn-primary 主色（也是红）通过字号/重量拉开层级，
+   而不是又一层红色 outline，导致整行按钮都"红成一片"。 */
+.research-filters .btn-ghost.danger {
+  background: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+}
+.research-filters .btn-ghost.danger:hover:not(:disabled) {
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
+}
 
 .research-list {
   display: flex;
