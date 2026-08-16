@@ -10,6 +10,8 @@ import { renderCompare } from '../ui/compare.js';
 import { toast } from '../ui/toast.js';
 
 const CAT_LABEL = { nail: '美甲', hairColor: '发色', hairStyle: '发型' };
+/* HTML 转义：generating/error 占位卡与提示文案使用，防止特殊字符破坏结构 */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let currentHistoryFilter = 'all';
 let historyPollTimer = null;      // 后台生成期间轮询刷新「我的」记录
 let historyUrls = new Set();      // 已创建的 objectURL，重渲染前回收防泄漏
