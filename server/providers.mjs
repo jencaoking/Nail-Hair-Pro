@@ -349,10 +349,14 @@ const agnes = {
   notes: '文生图/图生图/多图合成，支持 1K–4K 档位与多种宽高比。图生图 base64 直传不经图床，高信息密度图像效果好。',
   async edit({ imageBlob, prompt, width, height, signal, ctx }) {
     const b64 = await b64Of(imageBlob);
+    // Agnes 2K/4K 档位 PNG 编码后极易超过 750KB（研究图片 base64 上限），导致 hasOut=false、
+    // 用户在「研究数据」页看不到结果图。强制降到 1K 档位（1024×768 / 768×1024），保证研究数据可持久化
+    // 与展示，画质对该业务（指甲/发色/发型）仍足够清晰。
+    const size = (width >= height) ? '1024x768' : '768x1024';
     const body = {
       model: 'agnes-image-2.1-flash',
       prompt,
-      size: `${width}x${height}`,
+      size,
       extra_body: {
         image: [`data:image/jpeg;base64,${b64}`],
         response_format: 'b64_json'
