@@ -8,7 +8,7 @@ export class AIError extends Error {
 }
 
 export const ERROR_COPY = {
-  Network: { face: '小蝴蝶结打结了 >_<', msg: '网络不太顺畅，图片没能送出去', sub: '稍等一下再试；如果一直失败，可能站点流量太挤啦。' },
+  Network: { face: '小蝴蝶结打结了 >_<', msg: '图片没能送出去，AI 引擎连接不畅', sub: '一般是站点的引擎或图床暂时连不上，稍后再试；若持续失败请联系站长检查引擎配置。' },
   ServerDown: { face: '魔法屋暂时打烊 >_<', msg: '生成服务没有响应', sub: '请确认站点已正常启动，稍后再来试一次。' },
   RateLimit: { face: '排队的小兔子太多了 >_<', msg: '现在人多，需要等一小会儿', sub: '免费引擎偶尔会挤，稍后重试一般就好啦。' },
   Quota: { face: '额度小饼干不够了 >_<', msg: '站点当前引擎额度不足', sub: '站点会尽快恢复，也可以稍后再来看看。' },

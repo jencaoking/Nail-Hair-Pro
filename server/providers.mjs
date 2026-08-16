@@ -72,10 +72,13 @@ function multipart(fields) {
 }
 
 /* ---------- 临时图床链：tmpfiles → uguu(48h) → litterbox(24h) → imgbb(站长key)
- * 全部匿名可用、无需注册；任何一个挂了自动换下一个。单个图床 25s 超时防挂死。 */
-async function uploadTmpfiles(buf) {
+ * 全部匿名可用、无需注册；任何一个挂了自动换下一个。
+ * 单个图床 25s 超时，同时受外层 signal（tryOn 的整链预算）约束，避免串行拖死整个请求。 */
+const sig = (signal, ms) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
+
+async function uploadTmpfiles(buf, signal) {
   const { body, contentType } = multipart([{ name: 'file', filename: 'photo.jpg', buf, mime: 'image/jpeg' }]);
-  const res = await pfetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: AbortSignal.timeout(25000) });
+  const res = await pfetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: sig(signal, 25000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const j = await res.json().catch(() => null);
   const url = j && j.data && j.data.url;
@@ -83,9 +86,9 @@ async function uploadTmpfiles(buf) {
   return url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
 }
 
-async function uploadUguu(buf) {
+async function uploadUguu(buf, signal) {
   const { body, contentType } = multipart([{ name: 'files[]', filename: 'photo.jpg', buf, mime: 'image/jpeg' }]);
-  const res = await pfetch('https://uguu.se/upload.php', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: AbortSignal.timeout(25000) });
+  const res = await pfetch('https://uguu.se/upload.php', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: sig(signal, 25000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const j = await res.json().catch(() => null);
   const url = j && j.files && j.files[0] && j.files[0].url;
@@ -93,22 +96,22 @@ async function uploadUguu(buf) {
   return url;
 }
 
-async function uploadLitterbox(buf) {
+async function uploadLitterbox(buf, signal) {
   const { body, contentType } = multipart([
     { name: 'reqtype', value: 'fileupload' },
     { name: 'time', value: '24h' },
     { name: 'fileToUpload', filename: 'photo.jpg', buf, mime: 'image/jpeg' }
   ]);
-  const res = await pfetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: AbortSignal.timeout(25000) });
+  const res = await pfetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: sig(signal, 25000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const t = (await res.text()).trim();
   if (!/^https:\/\//.test(t)) throw new Error('返回异常');
   return t;
 }
 
-async function uploadImgbb(buf, key) {
+async function uploadImgbb(buf, key, signal) {
   const { body, contentType } = multipart([{ name: 'image', filename: 'photo.jpg', buf, mime: 'image/jpeg' }]);
-  const res = await pfetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(key), { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: AbortSignal.timeout(25000) });
+  const res = await pfetch('https://api.imgbb.com/1/upload?key=' + encodeURIComponent(key), { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: sig(signal, 25000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const j = await res.json().catch(() => null);
   const url = j && j.data && (j.data.url || j.data.display_url);
@@ -116,17 +119,22 @@ async function uploadImgbb(buf, key) {
   return url;
 }
 
-async function uploadTemp(blob, keys) {
+async function uploadTemp(blob, keys, signal) {
   const buf = Buffer.from(await blob.arrayBuffer());
   const hosts = [
-    ['tmpfiles', () => uploadTmpfiles(buf)],
-    ['uguu', () => uploadUguu(buf)],
-    ['litterbox', () => uploadLitterbox(buf)]
+    ['tmpfiles', () => uploadTmpfiles(buf, signal)],
+    ['uguu', () => uploadUguu(buf, signal)],
+    ['litterbox', () => uploadLitterbox(buf, signal)]
   ];
-  if (keys && keys.imgbb) hosts.push(['imgbb', () => uploadImgbb(buf, keys.imgbb)]);
+  if (keys && keys.imgbb) hosts.push(['imgbb', () => uploadImgbb(buf, keys.imgbb, signal)]);
   const errs = [];
   for (const [name, fn] of hosts) {
-    try { return await fn(); } catch (e) { errs.push(name + '：' + ((e.cause && e.cause.message) || e.message)); }
+    // 外层已中止（用户取消 / 整链超时）时立即停止，不再尝试下一个图床
+    if (signal && signal.aborted) throw new AIError('Timeout', '生成超时');
+    try { return await fn(); } catch (e) {
+      if (signal && signal.aborted) throw new AIError('Timeout', '生成超时');
+      errs.push(name + '：' + ((e.cause && e.cause.message) || e.message));
+    }
   }
   throw new AIError('Network', '临时图床都连不上（' + errs.join('；') + '）');
 }
@@ -148,7 +156,7 @@ const pollinations = {
     await new Promise(r => setTimeout(r, wait));
   },
   async edit({ imageBlob, prompt, width, height, signal, ctx }) {
-    const imageUrl = await uploadTemp(imageBlob, ctx.keys);
+    const imageUrl = await uploadTemp(imageBlob, ctx.keys, signal);
     await this._throttle();
     const token = String((ctx.keys && ctx.keys.pollinations) || '').trim();
     /* 有 Token → kontext 高保真；匿名 → 默认模型 + image 参考（实测可用） */
