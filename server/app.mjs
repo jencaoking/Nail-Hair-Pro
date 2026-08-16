@@ -328,20 +328,28 @@ async function handleAdmin(req, res, url) {
   }
 
   /* 密钥（脱敏读 / 明文写） */
-  if (req.method === 'GET' && op === 'keys') return json(res, 200, { ok: true, keys: store.maskedKeys() });
+  if (req.method === 'GET' && op === 'keys') {
+    await store.maybeRefresh(true);   // 读前强制拉最新 KV，避免热实例缓存旧配置
+    return json(res, 200, { ok: true, keys: store.maskedKeys() });
+  }
   if (req.method === 'POST' && op === 'keys') {
     let body;
     try { body = JSON.parse(await readBody(req, 64 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
     const okSet = store.setKey(body.field, body.value);
     if (!okSet) return json(res, 400, { ok: false, message: '未知密钥字段' });
     store.save();
-    return json(res, 200, { ok: true, keys: store.maskedKeys() });
+    await store.flush().catch(() => {});   // 等在途 KV 写完成，再判断是否持久化成功
+    const writeError = store.getWriteError();
+    const resp = { ok: true, keys: store.maskedKeys() };
+    if (writeError) resp.warning = writeError;
+    return json(res, 200, resp);
   }
   if (req.method === 'POST' && op === 'keys/verify') {
     let body;
     try { body = JSON.parse(await readBody(req, 8 * 1024)); } catch { return json(res, 400, { ok: false, message: '请求格式不正确' }); }
     const p = byId(body.provider);
     if (!p || !p.verify) return json(res, 400, { ok: false, message: '该引擎不支持验证' });
+    await store.maybeRefresh(true);   // 验证前强制拉最新 KV，保证读到刚保存的密钥
     const d = store.load();
     if (p.requiresKey) {
       const k = d.keys[p.id];

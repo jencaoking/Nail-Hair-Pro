@@ -262,12 +262,13 @@ async function viewKeys(view) {
       /* 两个字段一次提交，留空不覆盖 */
       const cur = { accountId: values.find(v => v.field === 'accountId')?.value || '', token: values.find(v => v.field === 'token')?.value || '' };
       const j = await api('keys', { method: 'POST', body: { field: 'cloudflare', value: cur } }).catch(e => ({ ok: false, message: e.message }));
-      toast(j.ok ? '已保存' : (j.message || '保存失败'), j.ok ? '' : 'err');
+      toast(j.ok ? (j.warning || '已保存') : (j.message || '保存失败'), j.ok && !j.warning ? '' : 'err');
     } else {
       for (const v of values) {
         if (!v.value) continue;
         const j = await api('keys', { method: 'POST', body: v }).catch(e => ({ ok: false, message: e.message }));
         if (!j.ok) { toast(j.message || '保存失败', 'err'); return; }
+        if (j.warning) { toast(j.warning, 'err'); return; }
       }
       toast('已保存');
     }
@@ -298,7 +299,7 @@ async function viewKeys(view) {
     const v = document.getElementById('k-pollinations').value.trim();
     if (!v) return toast('先填入 Token，不需要就留空', 'err');
     const j = await api('keys', { method: 'POST', body: { field: 'pollinations', value: v } }).catch(e => ({ ok: false, message: e.message }));
-    toast(j.ok ? '已保存，下一次生成即用 kontext' : (j.message || '保存失败'), j.ok ? '' : 'err');
+    toast(j.ok ? (j.warning || '已保存，下一次生成即用 kontext') : (j.message || '保存失败'), j.ok && !j.warning ? '' : 'err');
     if (j.ok) viewKeys(view);
   });
 
@@ -307,7 +308,7 @@ async function viewKeys(view) {
     const v = document.getElementById('k-imgbb').value.trim();
     if (!v) return toast('先填入 imgbb 密钥', 'err');
     const j = await api('keys', { method: 'POST', body: { field: 'imgbb', value: v } }).catch(e => ({ ok: false, message: e.message }));
-    toast(j.ok ? '已保存' : (j.message || '保存失败'), j.ok ? '' : 'err');
+    toast(j.ok ? (j.warning || '已保存') : (j.message || '保存失败'), j.ok && !j.warning ? '' : 'err');
     if (j.ok) viewKeys(view);
   });
 }

@@ -168,22 +168,28 @@ export function load() {
 
 /* ---------- 写回：本地同步写文件；Vercel fire-and-forget 写 KV ---------- */
 let pendingWrites = [];
+let lastWriteError = null;   // 最近一次 KV 写入结果（供管理后台提示持久化失败）
 
 export function save() {
   dirty = false;
   if (IS_VERCEL) {
-    if (!KV_URL || !KV_TOKEN) return;   // 未配 KV，仅内存态
+    if (!KV_URL || !KV_TOKEN) {
+      lastWriteError = '未配置 KV（UPSTASH_REDIS_REST_URL/TOKEN），数据仅存内存，重启后丢失';
+      return;
+    }
     if (dataOrigin !== 'kv') {
       // 降级态：不直接写（会把空默认值覆盖真实数据），而是先重读 KV 真实数据、
       // 合并本会话的显式改动（密钥/设置/口令）后再写回；KV 仍不可达则仅存内存。
       const p = persistMerged()
-        .catch(err => console.error('[store] KV 恢复写失败，改动仅保留在内存', err.message))
+        .then(() => { lastWriteError = null; })
+        .catch(err => { lastWriteError = 'KV 写入失败：' + err.message; console.error('[store] KV 恢复写失败，改动仅保留在内存', err.message); })
         .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
       pendingWrites.push(p);
       return;
     }
     const p = kvSet(JSON.stringify(cache))
-      .catch(err => console.error('[store] KV 写入失败', err.message))
+      .then(() => { lastWriteError = null; })
+      .catch(err => { lastWriteError = 'KV 写入失败：' + err.message; console.error('[store] KV 写入失败', err.message); })
       .finally(() => { pendingWrites = pendingWrites.filter(x => x !== p); });
     pendingWrites.push(p);
     return;
@@ -191,7 +197,11 @@ export function save() {
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(TMP, JSON.stringify(cache, null, 2));
   fs.renameSync(TMP, FILE);
+  lastWriteError = null;
 }
+
+/* 最近一次写回的持久化结果：null=成功；字符串=失败原因（给管理后台提示用） */
+export function getWriteError() { return lastWriteError; }
 
 /* 降级态恢复写：读 KV 真实数据 → 把本会话「与默认值不同」的显式改动合并上去 → 写回。
  * 只合并确实被改过的字段，避免用空默认值覆盖真实密钥/设置。 */
@@ -213,11 +223,12 @@ async function persistMerged() {
 }
 
 /* 热实例周期刷新：Vercel 多实例各自持有内存快照，后台改密钥后其它实例 30s 内重新拉取。
- * 有在途/未落盘改动时跳过，避免覆盖；刷新失败静默，下一轮再试。 */
-export async function maybeRefresh() {
+ * 有在途/未落盘改动时跳过，避免覆盖；刷新失败静默，下一轮再试。
+ * force=true：跳过 30s TTL，立即从 KV 拉取（管理后台读密钥/验证前用，确保读到最新配置）。 */
+export async function maybeRefresh(force = false) {
   if (!IS_VERCEL || dataOrigin !== 'kv') return;
   if (dirty || pendingWrites.length) return;
-  if (Date.now() - lastKvLoad < KV_REFRESH_MS) return;
+  if (!force && Date.now() - lastKvLoad < KV_REFRESH_MS) return;
   try {
     const raw = await kvGet();
     if (raw) {
